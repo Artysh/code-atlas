@@ -197,16 +197,13 @@ async function showFileInGraph(filePath: string): Promise<void> {
 
   await ensureParsedData();
 
-  let viewToUse: ViewType;
-  if (isYamlFile(filePath)) {
-    viewToUse = 'k8sMap';
-  } else {
-    viewToUse = currentView === 'architecture' ? 'architecture' : currentView;
-  }
+  const viewToUse: ViewType = isYamlFile(filePath) ? 'k8sMap' : 'architecture';
+  currentView = viewToUse;
 
   panelManager.setFileViewActive(false);
   panelManager.show(viewToUse);
   await panelManager.waitForReady();
+  sendWorkspaceFolders();
 
   if (lastParsedFiles.length > 0 || lastK8sResources.length > 0) {
     const { nodes, edges } = graphBuilder.build(lastParsedFiles, lastRoutes, viewToUse, workspaceRoot);

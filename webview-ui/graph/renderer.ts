@@ -176,18 +176,27 @@ export class GraphRenderer {
 
   private flattenParents(): void {
     this._savedParents.clear();
+    const parentIds = new Set<string>();
     this.cy.nodes().forEach(node => {
       const parentId = node.data('parent');
       if (parentId) {
         this._savedParents.set(node.id(), parentId);
+        parentIds.add(parentId);
         node.move({ parent: null });
       }
     });
-    this.cy.nodes().filter(n => n.isParent() || n.data('type') === 'module').style('display', 'none');
+    for (const pid of parentIds) {
+      const node = this.cy.getElementById(pid);
+      if (node.length > 0) { node.style('display', 'none'); }
+    }
   }
 
   private restoreParents(): void {
-    this.cy.nodes().filter(n => n.data('type') === 'module').style('display', 'element');
+    const parentIds = new Set(this._savedParents.values());
+    for (const pid of parentIds) {
+      const node = this.cy.getElementById(pid);
+      if (node.length > 0) { node.style('display', 'element'); }
+    }
     this._savedParents.forEach((parentId, nodeId) => {
       const node = this.cy.getElementById(nodeId);
       if (node.length > 0) {
@@ -320,7 +329,7 @@ export class GraphRenderer {
     return Array.from(types).sort();
   }
 
-  filterGroups(visibleGroups: Set<string>): void {
+  filterGroups(visibleGroupIds: Set<string>): void {
     const groupNodeIds: string[] = [];
     this.cy.nodes().forEach(node => {
       if (node.isParent() || this._detachedChildren.has(node.id())) {
@@ -332,8 +341,7 @@ export class GraphRenderer {
       for (const nodeId of groupNodeIds) {
         if (this._manuallyHidden.has(nodeId)) { continue; }
         const node = this.cy.getElementById(nodeId);
-        const type = node.data('type');
-        if (visibleGroups.has(type)) {
+        if (visibleGroupIds.has(nodeId)) {
           this._reattachChildren(nodeId);
           node.style('display', 'element');
         } else {

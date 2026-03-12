@@ -63,9 +63,18 @@ export function getWebviewContent(webview: vscode.Webview, extensionUri: vscode.
             </select>
           </div>
         </div>
-      </div>
-
-      <div class="toolbar-section toolbar-right">
+        <div class="toolbar-divider"></div>
+        <div class="toolbar-group toolbar-actions">
+          <button id="btn-filter" class="tb tb-icon-label" title="Show/hide node types">
+            <svg width="14" height="14" viewBox="0 0 16 16"><path d="M1 3h14L9 9v4l-2 1V9z" stroke="currentColor" stroke-width="1.2" fill="none" stroke-linejoin="round"/></svg>
+            <span>Filter</span>
+          </button>
+          <button id="btn-toggle-sidebar" class="tb tb-icon-label" title="Toggle insights panel">
+            <svg width="14" height="14" viewBox="0 0 16 16"><circle cx="8" cy="5" r="1.5" fill="currentColor"/><path d="M8 8v5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><circle cx="8" cy="8" r="6.5" stroke="currentColor" stroke-width="1.2" fill="none"/></svg>
+            <span>Insights</span>
+          </button>
+        </div>
+        <div class="toolbar-divider"></div>
         <div class="toolbar-group toolbar-actions">
           <button id="btn-zoom-in" class="tb" title="Zoom in">
             <svg width="16" height="16" viewBox="0 0 16 16"><circle cx="7" cy="7" r="5" stroke="currentColor" stroke-width="1.3" fill="none"/><path d="M7 5v4M5 7h4" stroke="currentColor" stroke-width="1.4" fill="none"/><path d="M10.8 10.8L14 14" stroke="currentColor" stroke-width="1.5" fill="none"/></svg>
@@ -81,21 +90,6 @@ export function getWebviewContent(webview: vscode.Webview, extensionUri: vscode.
           </button>
           <button id="btn-export" class="tb" title="Export">
             <svg width="16" height="16" viewBox="0 0 16 16"><path d="M8 2v8M4.5 7L8 10.5 11.5 7" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M3 13h10" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
-          </button>
-        </div>
-        <div class="toolbar-divider"></div>
-        <div class="toolbar-group toolbar-actions">
-          <button id="btn-search" class="tb tb-icon-label" title="Search (Ctrl+F)">
-            <svg width="14" height="14" viewBox="0 0 16 16"><circle cx="7" cy="7" r="4.5" stroke="currentColor" stroke-width="1.3" fill="none"/><path d="M10.5 10.5L14 14" stroke="currentColor" stroke-width="1.5" fill="none"/></svg>
-            <span>Search</span>
-          </button>
-          <button id="btn-filter" class="tb tb-icon-label" title="Show/hide node types">
-            <svg width="14" height="14" viewBox="0 0 16 16"><path d="M1 3h14L9 9v4l-2 1V9z" stroke="currentColor" stroke-width="1.2" fill="none" stroke-linejoin="round"/></svg>
-            <span>Filter</span>
-          </button>
-          <button id="btn-toggle-sidebar" class="tb tb-icon-label" title="Toggle insights panel">
-            <svg width="14" height="14" viewBox="0 0 16 16"><circle cx="8" cy="5" r="1.5" fill="currentColor"/><path d="M8 8v5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><circle cx="8" cy="8" r="6.5" stroke="currentColor" stroke-width="1.2" fill="none"/></svg>
-            <span>Insights</span>
           </button>
         </div>
       </div>

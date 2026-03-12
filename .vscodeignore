@@ -1,4 +1,5 @@
 .vscode/**
+.cursor/**
 src/**
 webview-ui/**
 test/**
@@ -6,7 +7,11 @@ out/**
 scripts/**
 node_modules/**
 .gitignore
+.eslintrc*
 tsconfig.json
-*.map
+**/*.map
 **/*.ts
 **/.git/**
+**/.DS_Store
+*.vsix
+agent-transcripts/**

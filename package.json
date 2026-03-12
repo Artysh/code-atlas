@@ -245,7 +245,7 @@
     "@types/js-yaml": "^4.0.9",
     "@types/mocha": "^10.0.10",
     "@types/node": "^25.4.0",
-    "@types/vscode": "^1.110.0",
+    "@types/vscode": "^1.85.0",
     "@vscode/vsce": "^3.7.1",
     "cytoscape": "^3.33.1",
     "cytoscape-dagre": "^2.5.0",
@@ -255,7 +255,6 @@
     "typescript": "^5.9.3"
   },
   "dependencies": {
-    "js-yaml": "^4.1.1",
-    "sharp": "^0.34.5"
+    "js-yaml": "^4.1.1"
   }
 }

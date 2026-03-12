@@ -26,14 +26,20 @@ const TYPE_COLORS: Record<string, string> = {
   k8sResource: '#326CE5', argoResource: '#EF7B4D', helmChart: '#0F1689', namespace: '#6B7280',
 };
 
+interface GroupEntry {
+  label: string;
+  nodeIds: string[];
+  color: string;
+  totalChildren: number;
+}
+
 export class Filters {
   private popup: HTMLElement;
   private visibleTypes = new Set<string>();
-  private visibleGroups = new Set<string>();
+  private visibleGroupIds = new Set<string>();
   private allTypes: string[] = [];
-  private allGroups: string[] = [];
+  private groupEntries: GroupEntry[] = [];
   private typeCounts = new Map<string, number>();
-  private groupCounts = new Map<string, number>();
 
   constructor(private renderer: GraphRenderer, private vscode: VsCodeApi) {
     this.popup = document.getElementById('filter-popup')!;
@@ -59,26 +65,57 @@ export class Filters {
     const cy = this.renderer.getCy();
 
     this.typeCounts.clear();
-    this.groupCounts.clear();
     const typeSet = new Set<string>();
-    const groupSet = new Set<string>();
+
+    const labelMap = new Map<string, { nodeIds: string[]; childTypeCounts: Map<string, number>; totalChildren: number }>();
 
     cy.nodes().forEach(node => {
       const t = node.data('type');
       if (!t) { return; }
       if (node.isParent()) {
-        groupSet.add(t);
-        this.groupCounts.set(t, (this.groupCounts.get(t) || 0) + 1);
+        const label: string = node.data('label') || node.id();
+        let entry = labelMap.get(label);
+        if (!entry) {
+          entry = { nodeIds: [], childTypeCounts: new Map(), totalChildren: 0 };
+          labelMap.set(label, entry);
+        }
+        entry.nodeIds.push(node.id());
+        const children = node.children();
+        entry.totalChildren += children.length;
+        children.forEach((child: cytoscape.NodeSingular) => {
+          const ct = child.data('type');
+          if (ct) {
+            entry!.childTypeCounts.set(ct, (entry!.childTypeCounts.get(ct) || 0) + 1);
+          }
+        });
       } else {
         typeSet.add(t);
         this.typeCounts.set(t, (this.typeCounts.get(t) || 0) + 1);
       }
     });
 
+    this.groupEntries = [];
+    for (const [label, data] of labelMap) {
+      let dominantType = '';
+      let maxCount = 0;
+      for (const [ct, count] of data.childTypeCounts) {
+        if (count > maxCount) { maxCount = count; dominantType = ct; }
+      }
+      this.groupEntries.push({
+        label,
+        nodeIds: data.nodeIds,
+        color: TYPE_COLORS[dominantType] || TYPE_COLORS['module'] || '#888',
+        totalChildren: data.totalChildren,
+      });
+    }
+    this.groupEntries.sort((a, b) => a.label.localeCompare(b.label));
+
     this.allTypes = Array.from(typeSet).sort();
-    this.allGroups = Array.from(groupSet).sort();
     this.visibleTypes = new Set(this.allTypes);
-    this.visibleGroups = new Set(this.allGroups);
+    this.visibleGroupIds = new Set<string>();
+    for (const entry of this.groupEntries) {
+      for (const id of entry.nodeIds) { this.visibleGroupIds.add(id); }
+    }
     this.renderPopup();
   }
 
@@ -96,54 +133,64 @@ export class Filters {
     this.popup.style.top = `${rect.bottom + 4}px`;
   }
 
+  private isGroupVisible(entry: GroupEntry): boolean {
+    return entry.nodeIds.every(id => this.visibleGroupIds.has(id));
+  }
+
+  private setGroupVisible(entry: GroupEntry, visible: boolean): void {
+    for (const id of entry.nodeIds) {
+      if (visible) { this.visibleGroupIds.add(id); }
+      else { this.visibleGroupIds.delete(id); }
+    }
+  }
+
   private renderPopup(): void {
     this.popup.innerHTML = '';
 
-    if (this.allGroups.length > 0) {
+    if (this.groupEntries.length > 0) {
       const groupHeader = document.createElement('div');
       groupHeader.className = 'fp-header';
       groupHeader.innerHTML = `<span>Groups (Boxes)</span>`;
       const toggleAllGroups = document.createElement('button');
       toggleAllGroups.className = 'fp-toggle-all';
-      const allGroupsVisible = this.allGroups.every(g => this.visibleGroups.has(g));
+      const allGroupsVisible = this.groupEntries.every(e => this.isGroupVisible(e));
       toggleAllGroups.textContent = allGroupsVisible ? 'Hide All' : 'Show All';
       toggleAllGroups.addEventListener('click', () => {
         if (allGroupsVisible) {
-          for (const g of this.allGroups) { this.visibleGroups.delete(g); }
+          this.visibleGroupIds.clear();
         } else {
-          for (const g of this.allGroups) { this.visibleGroups.add(g); }
+          for (const entry of this.groupEntries) { this.setGroupVisible(entry, true); }
         }
-        this.renderer.filterGroups(this.visibleGroups);
+        this.renderer.filterGroups(this.visibleGroupIds);
         this.renderPopup();
       });
       groupHeader.appendChild(toggleAllGroups);
       this.popup.appendChild(groupHeader);
 
-      for (const group of this.allGroups) {
+      for (const entry of this.groupEntries) {
         const row = document.createElement('label');
         row.className = 'fp-item';
 
         const cb = document.createElement('input');
         cb.type = 'checkbox';
-        cb.checked = this.visibleGroups.has(group);
+        cb.checked = this.isGroupVisible(entry);
         cb.addEventListener('change', () => {
-          if (cb.checked) { this.visibleGroups.add(group); }
-          else { this.visibleGroups.delete(group); }
-          this.renderer.filterGroups(this.visibleGroups);
+          this.setGroupVisible(entry, cb.checked);
+          this.renderer.filterGroups(this.visibleGroupIds);
           this.renderPopup();
         });
 
         const dot = document.createElement('span');
         dot.className = 'fp-dot';
-        dot.style.background = TYPE_COLORS[group] || '#888';
+        dot.style.background = entry.color;
 
         const label = document.createElement('span');
         label.className = 'fp-label';
-        label.textContent = (TYPE_LABELS[group] || group);
+        label.textContent = entry.label;
 
         const count = document.createElement('span');
         count.className = 'fp-count';
-        count.textContent = String(this.groupCounts.get(group) || 0);
+        count.textContent = String(entry.totalChildren);
 
         row.appendChild(cb);
         row.appendChild(dot);

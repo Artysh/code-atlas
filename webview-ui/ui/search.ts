@@ -14,12 +14,12 @@ export class Search {
     this.resultsDiv = document.getElementById('search-results')!;
     this.countSpan = document.getElementById('search-result-count')!;
 
-    const btnSearch = document.getElementById('btn-search')!;
+    const btnSearch = document.getElementById('btn-search');
     const btnClose = document.getElementById('search-close')!;
     const btnPrev = document.getElementById('search-prev')!;
     const btnNext = document.getElementById('search-next')!;
 
-    btnSearch.addEventListener('click', () => this.toggle());
+    btnSearch?.addEventListener('click', () => this.toggle());
     btnClose.addEventListener('click', () => this.close());
     btnPrev.addEventListener('click', () => this.navigateResult(-1));
     btnNext.addEventListener('click', () => this.navigateResult(1));
