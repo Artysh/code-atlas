@@ -2,9 +2,9 @@ export type NodeType = 'file' | 'class' | 'function' | 'component' | 'route' | '
 
 export type EdgeType = 'import' | 'call' | 'render' | 'route' | 'extends' | 'implements';
 
-export type ViewType = 'architecture' | 'dependency' | 'callGraph' | 'componentTree' | 'routeMap';
+export type ViewType = 'architecture' | 'dependency' | 'callGraph' | 'componentTree' | 'routeMap' | 'userFlow';
 
-export type LayoutType = 'dagre' | 'cose' | 'breadthfirst' | 'grid' | 'circle';
+export type LayoutType = 'dagre' | 'dagreLR' | 'cose' | 'breadthfirst' | 'grid' | 'circle';
 
 export type InsightSeverity = 'error' | 'warning' | 'info';
 
@@ -113,6 +113,14 @@ export interface CyEdgeData {
   };
 }
 
+export interface FileDeps {
+  filePath: string;
+  fileName: string;
+  imports: { filePath: string; fileName: string; symbols: string[] }[];
+  importedBy: { filePath: string; fileName: string; symbols: string[] }[];
+  symbols: { name: string; type: NodeType; calls: string[] }[];
+}
+
 // Message protocols
 
 export type ToWebviewMessage =
@@ -120,7 +128,9 @@ export type ToWebviewMessage =
   | { command: 'setInsights'; data: Insight[] }
   | { command: 'setView'; view: ViewType }
   | { command: 'highlight'; nodeIds: string[] }
-  | { command: 'setLoading'; loading: boolean };
+  | { command: 'setLoading'; loading: boolean }
+  | { command: 'focusFile'; filePath: string }
+  | { command: 'setFileDeps'; data: FileDeps };
 
 export type ToExtensionMessage =
   | { command: 'openFile'; filePath: string; line?: number; column?: number }
@@ -128,4 +138,7 @@ export type ToExtensionMessage =
   | { command: 'saveExport'; format: 'png' | 'svg' | 'json'; data: string }
   | { command: 'changeView'; view: ViewType }
   | { command: 'changeLayout'; layout: LayoutType }
+  | { command: 'getFileDeps'; filePath: string }
+  | { command: 'showFileCalls'; filePath: string }
+  | { command: 'showFileImporters'; filePath: string }
   | { command: 'ready' };

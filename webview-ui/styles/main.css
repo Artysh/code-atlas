@@ -44,8 +44,8 @@ html, body {
   height: 100%;
   background-color: var(--vscode-editor-background, #1e1e1e);
   background-image:
-    radial-gradient(circle, rgba(255,255,255,0.04) 1px, transparent 1px);
-  background-size: 24px 24px;
+    radial-gradient(circle, rgba(255,255,255,0.06) 1px, transparent 1px);
+  background-size: 32px 32px;
 }
 
 /* ================================================================
@@ -62,7 +62,9 @@ html, body {
   flex-shrink: 0;
   overflow-x: auto;
   overflow-y: hidden;
+  scrollbar-width: none;
 }
+#toolbar::-webkit-scrollbar { display: none; }
 
 .toolbar-section {
   display: flex;
@@ -102,13 +104,15 @@ html, body {
   border-radius: 4px;
   cursor: pointer;
   flex-shrink: 0;
-  transition: background 0.1s;
+  transition: background 0.2s ease, transform 0.15s ease, border-color 0.2s ease;
 }
 .tb:hover {
   background: var(--vscode-toolbar-hoverBackground, rgba(255,255,255,0.08));
+  transform: scale(1.05);
 }
 .tb:active {
   background: var(--vscode-toolbar-activeBackground, rgba(255,255,255,0.12));
+  transform: scale(0.95);
 }
 .tb svg {
   pointer-events: none;
@@ -144,9 +148,14 @@ select {
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23999'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
   background-position: right 8px center;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 select:focus {
   border-color: var(--vscode-focusBorder, #007fd4);
+  box-shadow: 0 0 0 1px var(--vscode-focusBorder, #007fd4);
+}
+select:hover {
+  border-color: var(--vscode-dropdown-border, #777);
 }
 
 /* Stats */
@@ -169,7 +178,8 @@ select:focus {
   bottom: 14px;
   right: 14px;
   display: flex;
-  gap: 12px;
+  flex-wrap: wrap;
+  gap: 10px;
   padding: 7px 14px;
   background: rgba(30, 30, 30, 0.88);
   border: 1px solid var(--vscode-panel-border, #444);
@@ -177,6 +187,7 @@ select:focus {
   z-index: 10;
   font-size: 11px;
   color: var(--vscode-descriptionForeground, #aaa);
+  max-width: calc(100% - 260px);
 }
 .legend-item {
   display: flex;
@@ -198,18 +209,25 @@ select:focus {
   position: absolute;
   bottom: 50px;
   left: 14px;
-  width: 200px;
-  height: 130px;
+  width: 220px;
+  height: 150px;
   border: 1px solid var(--vscode-panel-border, #444);
   border-radius: 6px;
-  background: rgba(30, 30, 30, 0.88);
+  background: rgba(20, 20, 22, 0.92);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
   z-index: 10;
   overflow: hidden;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+#minimap:hover {
+  border-color: var(--vscode-focusBorder, #007fd4);
+  box-shadow: 0 0 12px rgba(14, 99, 156, 0.2);
 }
 #minimap canvas {
   width: 100%;
   height: 100%;
-  cursor: pointer;
+  cursor: crosshair;
 }
 
 /* ================================================================
@@ -243,6 +261,8 @@ select:focus {
 #filters-panel {
   border-bottom: 1px solid var(--vscode-panel-border, #333);
   padding-bottom: 6px;
+  min-height: 0;
+  flex-shrink: 0;
 }
 .filter-item {
   display: flex;
@@ -252,6 +272,13 @@ select:focus {
   cursor: pointer;
   font-size: 13px;
   user-select: none;
+  overflow: hidden;
+  transition: background 0.15s ease;
+}
+.filter-item span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .filter-item:hover {
   background: var(--vscode-list-hoverBackground, #2a2d2e);
@@ -275,6 +302,97 @@ select:focus {
 .filter-dot-interface { background: #98C379; }
 .filter-dot-enum      { background: #D19A66; }
 .filter-dot-variable  { background: #61AFEF; }
+
+/* --- File Dependencies --- */
+#file-deps-panel {
+  border-bottom: 1px solid var(--vscode-panel-border, #333);
+  max-height: 50%;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+.panel-empty {
+  color: var(--vscode-descriptionForeground, #888);
+  padding: 10px 14px;
+  font-size: 12px;
+  font-style: italic;
+}
+.fdp-header {
+  padding: 8px 14px;
+  cursor: pointer;
+  border-bottom: 1px solid var(--vscode-panel-border, #333);
+}
+.fdp-header:hover { background: var(--vscode-list-hoverBackground, #2a2d2e); }
+.fdp-filename {
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--vscode-foreground, #ccc);
+}
+.fdp-section {
+  padding: 4px 0;
+}
+.fdp-section-title {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--vscode-descriptionForeground, #999);
+  padding: 6px 14px 4px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.fdp-count {
+  background: var(--vscode-badge-background, #4d4d4d);
+  color: var(--vscode-badge-foreground, #ccc);
+  border-radius: 8px;
+  padding: 0 6px;
+  font-size: 10px;
+  font-weight: normal;
+}
+.fdp-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 14px 5px 22px;
+  cursor: pointer;
+  font-size: 12px;
+  flex-wrap: wrap;
+  transition: background 0.15s ease;
+}
+.fdp-item:hover { background: var(--vscode-list-hoverBackground, #2a2d2e); }
+.fdp-name {
+  font-weight: 500;
+  color: var(--vscode-foreground, #ccc);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.fdp-symbols {
+  font-size: 11px;
+  color: var(--vscode-descriptionForeground, #888);
+  margin-left: auto;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 120px;
+}
+.fdp-calls {
+  font-size: 10px;
+  color: var(--vscode-descriptionForeground, #777);
+  margin-left: auto;
+}
+.fdp-badge {
+  font-size: 9px;
+  font-weight: 600;
+  text-transform: uppercase;
+  padding: 1px 5px;
+  border-radius: 3px;
+  color: #fff;
+  flex-shrink: 0;
+}
+.fdp-badge-function  { background: #C678DD; }
+.fdp-badge-class     { background: #E5C07B; color: #1e1e1e; }
+.fdp-badge-component { background: #56B6C2; }
 
 /* --- Insights --- */
 #insights-panel {
@@ -320,6 +438,7 @@ select:focus {
   cursor: pointer;
   font-size: 13px;
   align-items: flex-start;
+  transition: background 0.15s ease;
 }
 .insight-item:hover {
   background: var(--vscode-list-hoverBackground, #2a2d2e);
@@ -354,8 +473,13 @@ select:focus {
   background: var(--vscode-editor-background, #1e1e1e);
   border-bottom: 2px solid var(--vscode-focusBorder, #007fd4);
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5);
+  animation: searchSlideDown 0.2s ease-out;
 }
 #search-overlay.hidden { display: none; }
+@keyframes searchSlideDown {
+  from { opacity: 0; transform: translateY(-100%); }
+  to { opacity: 1; transform: translateY(0); }
+}
 #search-box {
   display: flex;
   align-items: center;
@@ -396,6 +520,7 @@ select:focus {
   display: flex;
   gap: 10px;
   align-items: center;
+  transition: background 0.12s ease, color 0.12s ease;
 }
 .search-result-item:hover,
 .search-result-item.active {
@@ -423,15 +548,18 @@ select:focus {
   justify-content: center;
   gap: 16px;
   background: rgba(30, 30, 30, 0.9);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
   z-index: 200;
 }
 #loading.hidden { display: none; }
 .spinner {
-  width: 36px; height: 36px;
-  border: 3px solid rgba(255, 255, 255, 0.12);
+  width: 40px; height: 40px;
+  border: 3px solid rgba(255, 255, 255, 0.08);
   border-top-color: var(--vscode-progressBar-background, #0e70c0);
+  border-right-color: var(--vscode-progressBar-background, #0e70c0);
   border-radius: 50%;
-  animation: spin 0.8s linear infinite;
+  animation: spin 0.7s cubic-bezier(0.4, 0, 0.2, 1) infinite;
 }
 .loading-text { font-size: 14px; color: var(--vscode-foreground, #ccc); }
 @keyframes spin { to { transform: rotate(360deg); } }
@@ -449,10 +577,15 @@ select:focus {
   z-index: 300;
   pointer-events: none;
   max-width: 420px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.55);
   line-height: 1.6;
+  animation: tooltipFadeIn 0.15s ease-out;
 }
 #tooltip.hidden { display: none; }
+@keyframes tooltipFadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
 .tooltip-type { color: #56B6C2; font-weight: 500; }
 .tooltip-path {
   color: var(--vscode-descriptionForeground, #888);
@@ -473,9 +606,15 @@ select:focus {
   padding: 4px 0;
   z-index: 400;
   min-width: 180px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.55);
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.6);
+  animation: menuFadeIn 0.15s ease-out;
 }
 #context-menu.hidden, #export-menu.hidden { display: none; }
+
+@keyframes menuFadeIn {
+  from { opacity: 0; transform: scale(0.95) translateY(-4px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
 
 .context-menu-item, .popup-item {
   display: block;
@@ -488,10 +627,25 @@ select:focus {
   text-align: left;
   cursor: pointer;
   white-space: nowrap;
+  transition: background 0.12s ease, color 0.12s ease;
 }
 .context-menu-item:hover, .popup-item:hover {
   background: var(--vscode-menu-selectionBackground, #094771);
   color: var(--vscode-menu-selectionForeground, #fff);
+}
+
+.context-menu-divider {
+  height: 1px;
+  background: var(--vscode-menu-separatorBackground, #454545);
+  margin: 4px 8px;
+}
+
+.ctx-icon {
+  display: inline-block;
+  width: 22px;
+  text-align: center;
+  margin-right: 4px;
+  font-size: 12px;
 }
 
 /* ================================================================
@@ -504,5 +658,6 @@ body.vscode-light #minimap,
 body.vscode-light #legend { background: rgba(255, 255, 255, 0.92); }
 body.vscode-light #loading { background: rgba(255, 255, 255, 0.9); }
 body.vscode-light #graph-container {
-  background-image: radial-gradient(circle, rgba(0,0,0,0.06) 1px, transparent 1px);
+  background-image: radial-gradient(circle, rgba(0,0,0,0.07) 1px, transparent 1px);
+  background-size: 32px 32px;
 }

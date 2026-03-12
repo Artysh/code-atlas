@@ -31,6 +31,11 @@
     "onCommand:code-atlas.showCallGraph",
     "onCommand:code-atlas.showComponentTree",
     "onCommand:code-atlas.showRouteMap",
+    "onCommand:code-atlas.showUserFlow",
+    "onCommand:code-atlas.showFileInGraph",
+    "onCommand:code-atlas.showFileGraph",
+    "onCommand:code-atlas.showFileCalls",
+    "onCommand:code-atlas.showFileImporters",
     "onCommand:code-atlas.refresh",
     "onCommand:code-atlas.exportGraph"
   ],
@@ -91,11 +96,65 @@
         "category": "Code Atlas"
       },
       {
+        "command": "code-atlas.showUserFlow",
+        "title": "Show User Flow",
+        "category": "Code Atlas"
+      },
+      {
+        "command": "code-atlas.showFileInGraph",
+        "title": "Show File in Graph",
+        "category": "Code Atlas"
+      },
+      {
+        "command": "code-atlas.showFileGraph",
+        "title": "Show File Dependencies",
+        "category": "Code Atlas"
+      },
+      {
+        "command": "code-atlas.showFileCalls",
+        "title": "Show Called Functions",
+        "category": "Code Atlas"
+      },
+      {
+        "command": "code-atlas.showFileImporters",
+        "title": "Show Who Imports This",
+        "category": "Code Atlas"
+      },
+      {
         "command": "code-atlas.exportGraph",
         "title": "Export Graph",
         "category": "Code Atlas"
       }
     ],
+    "submenus": [
+      {
+        "id": "code-atlas.submenu",
+        "label": "Atlas"
+      }
+    ],
+    "menus": {
+      "explorer/context": [
+        {
+          "submenu": "code-atlas.submenu",
+          "when": "resourceExtname =~ /\\.(ts|tsx|js|jsx)$/",
+          "group": "code-atlas"
+        }
+      ],
+      "code-atlas.submenu": [
+        {
+          "command": "code-atlas.showFileInGraph"
+        },
+        {
+          "command": "code-atlas.showFileGraph"
+        },
+        {
+          "command": "code-atlas.showFileCalls"
+        },
+        {
+          "command": "code-atlas.showFileImporters"
+        }
+      ]
+    },
     "configuration": {
       "title": "Code Atlas",
       "properties": {

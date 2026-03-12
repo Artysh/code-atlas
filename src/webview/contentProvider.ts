@@ -36,12 +36,14 @@ export function getWebviewContent(webview: vscode.Webview, extensionUri: vscode.
             <option value="callGraph">Call Graph</option>
             <option value="componentTree">Component Tree</option>
             <option value="routeMap">Route Map</option>
+            <option value="userFlow">User Flow</option>
           </select>
         </div>
         <div class="toolbar-divider"></div>
         <div class="toolbar-group">
           <select id="layout-selector" title="Layout algorithm">
-            <option value="dagre">Hierarchical</option>
+            <option value="dagre">Top to Bottom</option>
+            <option value="dagreLR">Left to Right</option>
             <option value="cose">Force-Directed</option>
             <option value="breadthfirst">Breadthfirst</option>
             <option value="grid">Grid</option>
@@ -103,6 +105,12 @@ export function getWebviewContent(webview: vscode.Webview, extensionUri: vscode.
         <section id="filters-panel">
           <h3 class="panel-heading">Filters</h3>
           <div id="filter-checkboxes"></div>
+        </section>
+        <section id="file-deps-panel">
+          <h3 class="panel-heading">File Dependencies</h3>
+          <div id="file-deps-content">
+            <p class="panel-empty">Click a node to see its dependencies.</p>
+          </div>
         </section>
         <section id="insights-panel">
           <h3 class="panel-heading">Insights</h3>

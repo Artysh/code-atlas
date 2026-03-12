@@ -13,6 +13,7 @@ const VIEW_ITEMS: SidebarEntry[] = [
   { label: 'Call Graph', command: 'code-atlas.showCallGraph', icon: 'call-outgoing', description: 'Function calls' },
   { label: 'Component Tree', command: 'code-atlas.showComponentTree', icon: 'symbol-class', description: 'React components' },
   { label: 'Route Map', command: 'code-atlas.showRouteMap', icon: 'globe', description: 'API routes' },
+  { label: 'User Flow', command: 'code-atlas.showUserFlow', icon: 'git-merge', description: 'Service access paths' },
 ];
 
 const ACTION_ITEMS: SidebarEntry[] = [

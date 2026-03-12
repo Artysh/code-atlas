@@ -6,8 +6,9 @@ import { Search } from './ui/search';
 import { Filters } from './ui/filters';
 import { Minimap } from './ui/minimap';
 import { InsightsPanel } from './ui/insightsPanel';
+import { FileDepsPanel } from './ui/fileDepsPanel';
 import { Exporter } from './export/exporter';
-import type { ToWebviewMessage, Insight, ViewType } from '../src/types';
+import type { ToWebviewMessage, Insight, ViewType, FileDeps } from '../src/types';
 
 interface VsCodeApi {
   postMessage(message: unknown): void;
@@ -31,9 +32,10 @@ const controls = new Controls(renderer, vscode);
 const search = new Search(renderer);
 const filters = new Filters(renderer, vscode);
 const insightsPanel = new InsightsPanel(renderer, vscode);
+const fileDepsPanel = new FileDepsPanel(renderer, vscode);
 const exporter = new Exporter(renderer, vscode);
 
-setupInteractions(renderer, vscode);
+setupInteractions(renderer, vscode, fileDepsPanel);
 
 function updateCounts(): void {
   const cy = renderer.getCy();
@@ -68,6 +70,20 @@ window.addEventListener('message', (event: MessageEvent<ToWebviewMessage>) => {
 
     case 'highlight':
       renderer.highlightNodes(message.nodeIds as string[]);
+      break;
+
+    case 'focusFile': {
+      const filePath = (message as { command: 'focusFile'; filePath: string }).filePath;
+      const cy = renderer.getCy();
+      const matchedNode = cy.nodes().filter(n => n.data('filePath') === filePath);
+      if (matchedNode.length > 0) {
+        renderer.focusOnNode(matchedNode[0].id());
+      }
+      break;
+    }
+
+    case 'setFileDeps':
+      fileDepsPanel.setFileDeps((message as { command: 'setFileDeps'; data: FileDeps }).data);
       break;
   }
 });

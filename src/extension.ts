@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import * as fs from 'fs';
+import * as path from 'path';
 import { Scanner } from './parsers/scanner';
 import { AstParser } from './parsers/astParser';
 import { RouteParser } from './parsers/routeParser';
@@ -7,7 +8,7 @@ import { GraphBuilder } from './graph/graphBuilder';
 import { Analyzer } from './insights/analyzer';
 import { CacheManager } from './cache/cacheManager';
 import { PanelManager } from './webview/panelManager';
-import { ViewType, ParsedFile, ParsedRoute } from './types';
+import { ViewType, ParsedFile, ParsedRoute, FileDeps } from './types';
 import { SidebarProvider } from './sidebar/sidebarProvider';
 
 let scanner: Scanner;
@@ -19,6 +20,10 @@ let cacheManager: CacheManager;
 let panelManager: PanelManager;
 let currentView: ViewType = 'architecture';
 let refreshDebounce: ReturnType<typeof setTimeout> | undefined;
+
+let lastParsedFiles: ParsedFile[] = [];
+let lastRoutes: ParsedRoute[] = [];
+let pendingFocusFile: string | null = null;
 
 export function activate(context: vscode.ExtensionContext): void {
   try {
@@ -43,9 +48,35 @@ export function activate(context: vscode.ExtensionContext): void {
       vscode.commands.registerCommand('code-atlas.showCallGraph', () => showGraph('callGraph')),
       vscode.commands.registerCommand('code-atlas.showComponentTree', () => showGraph('componentTree')),
       vscode.commands.registerCommand('code-atlas.showRouteMap', () => showGraph('routeMap')),
+      vscode.commands.registerCommand('code-atlas.showUserFlow', () => showGraph('userFlow')),
       vscode.commands.registerCommand('code-atlas.refresh', () => refresh()),
       vscode.commands.registerCommand('code-atlas.exportGraph', () => {
         panelManager.show(currentView);
+      }),
+
+      vscode.commands.registerCommand('code-atlas.showFileInGraph', (uri?: vscode.Uri) => {
+        const filePath = uri?.fsPath || vscode.window.activeTextEditor?.document.uri.fsPath;
+        if (!filePath) { return; }
+        pendingFocusFile = filePath;
+        showGraph(currentView === 'architecture' ? 'dependency' : currentView);
+      }),
+
+      vscode.commands.registerCommand('code-atlas.showFileGraph', (uri?: vscode.Uri) => {
+        const filePath = uri?.fsPath || vscode.window.activeTextEditor?.document.uri.fsPath;
+        if (!filePath) { return; }
+        showFileGraph(filePath);
+      }),
+
+      vscode.commands.registerCommand('code-atlas.showFileCalls', (uri?: vscode.Uri) => {
+        const filePath = uri?.fsPath || vscode.window.activeTextEditor?.document.uri.fsPath;
+        if (!filePath) { return; }
+        showFileCalls(filePath);
+      }),
+
+      vscode.commands.registerCommand('code-atlas.showFileImporters', (uri?: vscode.Uri) => {
+        const filePath = uri?.fsPath || vscode.window.activeTextEditor?.document.uri.fsPath;
+        if (!filePath) { return; }
+        showFileImporters(filePath);
       }),
     );
 
@@ -53,6 +84,19 @@ export function activate(context: vscode.ExtensionContext): void {
     panelManager.onDidChangeView((view) => {
       currentView = view;
       refresh();
+    });
+
+    panelManager.onDidRequestFileDeps((filePath) => {
+      const deps = computeFileDeps(filePath);
+      if (deps) { panelManager.sendFileDeps(deps); }
+    });
+
+    panelManager.onDidRequestFileCalls((filePath) => {
+      showFileCalls(filePath);
+    });
+
+    panelManager.onDidRequestFileImporters((filePath) => {
+      showFileImporters(filePath);
     });
 
     cacheManager.onDidInvalidate(() => {
@@ -78,6 +122,165 @@ async function showGraph(view: ViewType): Promise<void> {
   await refresh();
 }
 
+async function showFileGraph(filePath: string): Promise<void> {
+  const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+  if (!workspaceRoot) { return; }
+
+  panelManager.show('dependency');
+  panelManager.sendLoading(true);
+
+  try {
+    await ensureParsedData();
+
+    const { nodes, edges } = graphBuilder.buildFileGraph(lastParsedFiles, filePath, workspaceRoot);
+    panelManager.sendGraph(nodes, edges);
+
+    const deps = computeFileDeps(filePath);
+    if (deps) { panelManager.sendFileDeps(deps); }
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    vscode.window.showErrorMessage(`Code Atlas: ${msg}`);
+  } finally {
+    panelManager.sendLoading(false);
+  }
+}
+
+async function showFileCalls(filePath: string): Promise<void> {
+  const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+  if (!workspaceRoot) { return; }
+
+  panelManager.show('callGraph');
+  panelManager.sendLoading(true);
+
+  try {
+    await ensureParsedData();
+    const { nodes, edges } = graphBuilder.buildFileCalls(lastParsedFiles, filePath, workspaceRoot);
+    panelManager.sendGraph(nodes, edges);
+
+    const deps = computeFileDeps(filePath);
+    if (deps) { panelManager.sendFileDeps(deps); }
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    vscode.window.showErrorMessage(`Code Atlas: ${msg}`);
+  } finally {
+    panelManager.sendLoading(false);
+  }
+}
+
+async function showFileImporters(filePath: string): Promise<void> {
+  const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+  if (!workspaceRoot) { return; }
+
+  panelManager.show('dependency');
+  panelManager.sendLoading(true);
+
+  try {
+    await ensureParsedData();
+    const { nodes, edges } = graphBuilder.buildFileImporters(lastParsedFiles, filePath, workspaceRoot);
+    panelManager.sendGraph(nodes, edges);
+
+    const deps = computeFileDeps(filePath);
+    if (deps) { panelManager.sendFileDeps(deps); }
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    vscode.window.showErrorMessage(`Code Atlas: ${msg}`);
+  } finally {
+    panelManager.sendLoading(false);
+  }
+}
+
+async function ensureParsedData(): Promise<void> {
+  if (lastParsedFiles.length > 0) { return; }
+
+  const filePaths = await scanner.scan();
+  lastParsedFiles = [];
+  lastRoutes = [];
+
+  for (const filePath of filePaths) {
+    let parsed = cacheManager.get(filePath);
+    if (!parsed) {
+      const content = fs.readFileSync(filePath, 'utf-8');
+      parsed = astParser.parseFile(filePath, content);
+      cacheManager.set(filePath, parsed);
+
+      const routes = routeParser.parseFile(filePath, content);
+      lastRoutes.push(...routes);
+    }
+    lastParsedFiles.push(parsed);
+  }
+}
+
+function computeFileDeps(targetPath: string): FileDeps | null {
+  const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+  if (!workspaceRoot || lastParsedFiles.length === 0) { return null; }
+
+  const targetFile = lastParsedFiles.find(f => f.filePath === targetPath);
+  if (!targetFile) { return null; }
+
+  const imports: FileDeps['imports'] = [];
+  for (const imp of targetFile.imports) {
+    if (!imp.source.startsWith('.') && !imp.source.startsWith('/')) { continue; }
+    const dir = path.dirname(targetPath);
+    const resolved = resolveImportForDeps(dir, imp.source, lastParsedFiles);
+    if (resolved) {
+      imports.push({
+        filePath: resolved,
+        fileName: path.basename(resolved),
+        symbols: imp.specifiers,
+      });
+    }
+  }
+
+  const importedBy: FileDeps['importedBy'] = [];
+  for (const file of lastParsedFiles) {
+    if (file.filePath === targetPath) { continue; }
+    for (const imp of file.imports) {
+      if (!imp.source.startsWith('.') && !imp.source.startsWith('/')) { continue; }
+      const dir = path.dirname(file.filePath);
+      const resolved = resolveImportForDeps(dir, imp.source, lastParsedFiles);
+      if (resolved === targetPath) {
+        importedBy.push({
+          filePath: file.filePath,
+          fileName: path.basename(file.filePath),
+          symbols: imp.specifiers,
+        });
+      }
+    }
+  }
+
+  const symbols: FileDeps['symbols'] = targetFile.symbols
+    .filter(s => s.type === 'function' || s.type === 'class' || s.type === 'component')
+    .map(s => ({
+      name: s.name,
+      type: s.type,
+      calls: s.calls || [],
+    }));
+
+  return {
+    filePath: targetPath,
+    fileName: path.basename(targetPath),
+    imports,
+    importedBy,
+    symbols,
+  };
+}
+
+function resolveImportForDeps(fromDir: string, importPath: string, parsedFiles: ParsedFile[]): string | null {
+  const resolved = path.resolve(fromDir, importPath);
+  const extensions = ['.ts', '.tsx', '.js', '.jsx'];
+  const knownPaths = new Set(parsedFiles.map(f => f.filePath));
+
+  if (knownPaths.has(resolved)) { return resolved; }
+  for (const ext of extensions) {
+    if (knownPaths.has(resolved + ext)) { return resolved + ext; }
+  }
+  for (const ext of extensions) {
+    const idx = path.join(resolved, `index${ext}`);
+    if (knownPaths.has(idx)) { return idx; }
+  }
+  return null;
+}
+
 async function refresh(): Promise<void> {
   const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
   if (!workspaceRoot) {
@@ -89,8 +292,8 @@ async function refresh(): Promise<void> {
 
   try {
     const filePaths = await scanner.scan();
-    const parsedFiles: ParsedFile[] = [];
-    const allRoutes: ParsedRoute[] = [];
+    lastParsedFiles = [];
+    lastRoutes = [];
 
     await vscode.window.withProgress(
       {
@@ -109,9 +312,9 @@ async function refresh(): Promise<void> {
             cacheManager.set(filePath, parsed);
 
             const routes = routeParser.parseFile(filePath, content);
-            allRoutes.push(...routes);
+            lastRoutes.push(...routes);
           }
-          parsedFiles.push(parsed);
+          lastParsedFiles.push(parsed);
 
           if (i % 50 === 0) {
             progress.report({
@@ -123,11 +326,18 @@ async function refresh(): Promise<void> {
       },
     );
 
-    const { nodes, edges } = graphBuilder.build(parsedFiles, allRoutes, currentView, workspaceRoot);
-    const insights = analyzer.analyze(parsedFiles, workspaceRoot);
+    const { nodes, edges } = graphBuilder.build(lastParsedFiles, lastRoutes, currentView, workspaceRoot);
+    const insights = analyzer.analyze(lastParsedFiles, workspaceRoot);
 
     panelManager.sendGraph(nodes, edges);
     panelManager.sendInsights(insights);
+
+    if (pendingFocusFile) {
+      setTimeout(() => {
+        panelManager.focusFile(pendingFocusFile!);
+        pendingFocusFile = null;
+      }, 600);
+    }
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);
     vscode.window.showErrorMessage(`Code Atlas: Analysis failed — ${msg}`);

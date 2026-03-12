@@ -1,24 +1,26 @@
 import cytoscape from 'cytoscape';
 import type { GraphRenderer } from './renderer';
+import type { FileDepsPanel } from '../ui/fileDepsPanel';
 
 interface VsCodeApi {
   postMessage(message: unknown): void;
 }
 
-export function setupInteractions(renderer: GraphRenderer, vscode: VsCodeApi): void {
+type MenuItem = { label: string; icon: string; action: () => void } | 'divider';
+
+export function setupInteractions(renderer: GraphRenderer, vscode: VsCodeApi, fileDepsPanel: FileDepsPanel): void {
   const cy = renderer.getCy();
   const tooltip = document.getElementById('tooltip')!;
   const contextMenu = document.getElementById('context-menu')!;
 
   let focusModeNode: string | null = null;
+  const PAN_STEP = 50;
+  const PAN_STEP_FAST = 150;
 
-  // Click node -> open file in editor
   cy.on('tap', 'node', (event) => {
     const node = event.target;
     const filePath = node.data('filePath');
     if (!filePath) { return; }
-
-    // Don't open compound nodes
     if (node.isParent()) { return; }
 
     vscode.postMessage({
@@ -27,9 +29,10 @@ export function setupInteractions(renderer: GraphRenderer, vscode: VsCodeApi): v
       line: node.data('line'),
       column: node.data('column'),
     });
+
+    vscode.postMessage({ command: 'getFileDeps', filePath });
   });
 
-  // Click background -> clear highlight
   cy.on('tap', (event) => {
     if (event.target === cy) {
       renderer.clearHighlight();
@@ -38,7 +41,6 @@ export function setupInteractions(renderer: GraphRenderer, vscode: VsCodeApi): v
     }
   });
 
-  // Double-click node -> focus mode (show only connected nodes)
   cy.on('dbltap', 'node', (event) => {
     const node = event.target;
     if (node.isParent()) { return; }
@@ -53,10 +55,15 @@ export function setupInteractions(renderer: GraphRenderer, vscode: VsCodeApi): v
     }
   });
 
-  // Hover -> show tooltip
   cy.on('mouseover', 'node', (event) => {
     const node = event.target;
     if (node.isParent()) { return; }
+
+    node.addClass('hover-glow');
+    node.connectedEdges().forEach((e: cytoscape.EdgeSingular) => {
+      e.style('opacity', 0.9);
+      e.style('width', 3.5);
+    });
 
     const type = node.data('type') || 'unknown';
     const label = node.data('label') || '';
@@ -84,16 +91,45 @@ export function setupInteractions(renderer: GraphRenderer, vscode: VsCodeApi): v
 
     const renderedPos = node.renderedPosition();
     const containerRect = cy.container()!.getBoundingClientRect();
+    const tooltipRect = tooltip.getBoundingClientRect();
 
-    tooltip.style.left = `${containerRect.left + renderedPos.x + 20}px`;
-    tooltip.style.top = `${containerRect.top + renderedPos.y - 10}px`;
+    let left = containerRect.left + renderedPos.x + 20;
+    let top = containerRect.top + renderedPos.y - 10;
+
+    if (left + tooltipRect.width > window.innerWidth) {
+      left = containerRect.left + renderedPos.x - tooltipRect.width - 20;
+    }
+    if (top + tooltipRect.height > window.innerHeight) {
+      top = window.innerHeight - tooltipRect.height - 10;
+    }
+    if (top < 0) { top = 10; }
+
+    tooltip.style.left = `${left}px`;
+    tooltip.style.top = `${top}px`;
   });
 
-  cy.on('mouseout', 'node', () => {
+  cy.on('mouseout', 'node', (event) => {
+    const node = event.target;
+    node.removeClass('hover-glow');
+    node.connectedEdges().forEach((e: cytoscape.EdgeSingular) => {
+      e.removeStyle('opacity');
+      e.removeStyle('width');
+    });
     tooltip.classList.add('hidden');
   });
 
-  // Right-click -> context menu
+  cy.on('mouseover', 'edge', (event) => {
+    const edge = event.target;
+    edge.style('opacity', 1);
+    edge.style('width', 4);
+  });
+
+  cy.on('mouseout', 'edge', (event) => {
+    const edge = event.target;
+    edge.removeStyle('opacity');
+    edge.removeStyle('width');
+  });
+
   cy.on('cxttap', 'node', (event) => {
     const node = event.target;
     if (node.isParent()) { return; }
@@ -106,32 +142,52 @@ export function setupInteractions(renderer: GraphRenderer, vscode: VsCodeApi): v
 
     contextMenu.innerHTML = '';
 
-    const menuItems = [
-      { label: 'Open File', action: () => {
+    const menuItems: MenuItem[] = [
+      { label: 'Open File', icon: '\u{1F4C4}', action: () => {
         vscode.postMessage({
           command: 'openFile',
           filePath: node.data('filePath'),
           line: node.data('line'),
         });
       }},
-      { label: 'Focus on Node', action: () => renderer.focusOnNode(nodeId) },
-      { label: 'Show Dependents', action: () => {
-        const depIds: string[] = [];
-        node.incomers().nodes().forEach((n: cytoscape.NodeSingular) => { depIds.push(n.id()); });
-        renderer.highlightNodes([nodeId, ...depIds]);
-      }},
-      { label: 'Show Dependencies', action: () => {
+      'divider',
+      { label: 'Show Dependencies', icon: '\u2192', action: () => {
         const depIds: string[] = [];
         node.outgoers().nodes().forEach((n: cytoscape.NodeSingular) => { depIds.push(n.id()); });
         renderer.highlightNodes([nodeId, ...depIds]);
       }},
-      { label: 'Clear Highlight', action: () => renderer.clearHighlight() },
+      { label: 'Show Dependents', icon: '\u2190', action: () => {
+        const depIds: string[] = [];
+        node.incomers().nodes().forEach((n: cytoscape.NodeSingular) => { depIds.push(n.id()); });
+        renderer.highlightNodes([nodeId, ...depIds]);
+      }},
+      { label: 'Show File Dependencies', icon: '\u{1F50D}', action: () => {
+        vscode.postMessage({ command: 'getFileDeps', filePath: node.data('filePath') });
+        const sidebar = document.getElementById('sidebar')!;
+        sidebar.classList.remove('hidden');
+        setTimeout(() => renderer.getCy().resize(), 100);
+      }},
+      { label: 'Show Called Functions', icon: '\u{26A1}', action: () => {
+        vscode.postMessage({ command: 'showFileCalls', filePath: node.data('filePath') });
+      }},
+      { label: 'Show Who Imports This', icon: '\u{1F517}', action: () => {
+        vscode.postMessage({ command: 'showFileImporters', filePath: node.data('filePath') });
+      }},
+      'divider',
+      { label: 'Focus on Node', icon: '\u{1F3AF}', action: () => renderer.focusOnNode(nodeId) },
+      { label: 'Clear Highlight', icon: '\u2716', action: () => renderer.clearHighlight() },
     ];
 
     for (const item of menuItems) {
+      if (item === 'divider') {
+        const hr = document.createElement('div');
+        hr.className = 'context-menu-divider';
+        contextMenu.appendChild(hr);
+        continue;
+      }
       const btn = document.createElement('button');
       btn.className = 'context-menu-item';
-      btn.textContent = item.label;
+      btn.innerHTML = `<span class="ctx-icon">${item.icon}</span>${item.label}`;
       btn.addEventListener('click', () => {
         item.action();
         hideContextMenu();
@@ -139,24 +195,88 @@ export function setupInteractions(renderer: GraphRenderer, vscode: VsCodeApi): v
       contextMenu.appendChild(btn);
     }
 
-    contextMenu.style.left = `${containerRect.left + renderedPos.x}px`;
-    contextMenu.style.top = `${containerRect.top + renderedPos.y}px`;
+    let left = containerRect.left + renderedPos.x;
+    let top = containerRect.top + renderedPos.y;
     contextMenu.classList.remove('hidden');
+
+    const menuRect = contextMenu.getBoundingClientRect();
+    if (left + menuRect.width > window.innerWidth) {
+      left = window.innerWidth - menuRect.width - 10;
+    }
+    if (top + menuRect.height > window.innerHeight) {
+      top = window.innerHeight - menuRect.height - 10;
+    }
+
+    contextMenu.style.left = `${left}px`;
+    contextMenu.style.top = `${top}px`;
   });
 
   function hideContextMenu(): void {
     contextMenu.classList.add('hidden');
   }
 
-  // Hide context menu on any click
   document.addEventListener('click', () => hideContextMenu());
 
-  // Keyboard shortcuts
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') {
-      renderer.clearHighlight();
-      focusModeNode = null;
-      hideContextMenu();
+    const target = e.target as HTMLElement;
+    if (target.tagName === 'INPUT' || target.tagName === 'SELECT' || target.tagName === 'TEXTAREA') {
+      return;
+    }
+
+    const step = e.shiftKey ? PAN_STEP_FAST : PAN_STEP;
+
+    switch (e.key) {
+      case 'Escape':
+        renderer.clearHighlight();
+        focusModeNode = null;
+        hideContextMenu();
+        break;
+      case 'ArrowUp':
+        e.preventDefault();
+        cy.panBy({ x: 0, y: step });
+        break;
+      case 'ArrowDown':
+        e.preventDefault();
+        cy.panBy({ x: 0, y: -step });
+        break;
+      case 'ArrowLeft':
+        e.preventDefault();
+        cy.panBy({ x: step, y: 0 });
+        break;
+      case 'ArrowRight':
+        e.preventDefault();
+        cy.panBy({ x: -step, y: 0 });
+        break;
+      case '+':
+      case '=':
+        e.preventDefault();
+        renderer.zoomIn();
+        break;
+      case '-':
+      case '_':
+        e.preventDefault();
+        renderer.zoomOut();
+        break;
+      case '0':
+        e.preventDefault();
+        renderer.fitView();
+        break;
+      case 'f':
+      case 'F':
+        if (!e.ctrlKey && !e.metaKey) {
+          e.preventDefault();
+          if (focusModeNode) {
+            renderer.clearHighlight();
+            focusModeNode = null;
+          } else {
+            const selected = cy.$(':selected');
+            if (selected.length > 0 && selected[0].isNode()) {
+              focusModeNode = selected[0].id();
+              renderer.focusOnNode(focusModeNode);
+            }
+          }
+        }
+        break;
     }
   });
 }

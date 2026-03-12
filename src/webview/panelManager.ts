@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { ToWebviewMessage, ToExtensionMessage, ViewType, CyNodeData, CyEdgeData, Insight } from '../types';
+import { ToWebviewMessage, ToExtensionMessage, ViewType, CyNodeData, CyEdgeData, Insight, FileDeps } from '../types';
 import { getWebviewContent } from './contentProvider';
 
 export class PanelManager implements vscode.Disposable {
@@ -8,8 +8,14 @@ export class PanelManager implements vscode.Disposable {
 
   private readonly _onDidRequestRefresh = new vscode.EventEmitter<void>();
   private readonly _onDidChangeView = new vscode.EventEmitter<ViewType>();
+  private readonly _onDidRequestFileDeps = new vscode.EventEmitter<string>();
+  private readonly _onDidRequestFileCalls = new vscode.EventEmitter<string>();
+  private readonly _onDidRequestFileImporters = new vscode.EventEmitter<string>();
   readonly onDidRequestRefresh = this._onDidRequestRefresh.event;
   readonly onDidChangeView = this._onDidChangeView.event;
+  readonly onDidRequestFileDeps = this._onDidRequestFileDeps.event;
+  readonly onDidRequestFileCalls = this._onDidRequestFileCalls.event;
+  readonly onDidRequestFileImporters = this._onDidRequestFileImporters.event;
 
   constructor(private context: vscode.ExtensionContext) {
     this.extensionUri = context.extensionUri;
@@ -62,6 +68,14 @@ export class PanelManager implements vscode.Disposable {
     this.postMessage({ command: 'highlight', nodeIds });
   }
 
+  focusFile(filePath: string): void {
+    this.postMessage({ command: 'focusFile', filePath });
+  }
+
+  sendFileDeps(deps: FileDeps): void {
+    this.postMessage({ command: 'setFileDeps', data: deps });
+  }
+
   get isVisible(): boolean {
     return this.panel?.visible ?? false;
   }
@@ -102,6 +116,18 @@ export class PanelManager implements vscode.Disposable {
         this._onDidChangeView.fire(message.view);
         break;
 
+      case 'getFileDeps':
+        this._onDidRequestFileDeps.fire(message.filePath);
+        break;
+
+      case 'showFileCalls':
+        this._onDidRequestFileCalls.fire(message.filePath);
+        break;
+
+      case 'showFileImporters':
+        this._onDidRequestFileImporters.fire(message.filePath);
+        break;
+
       case 'saveExport': {
         const filterMap: Record<string, Record<string, string[]>> = {
           png: { 'PNG Image': ['png'] },
@@ -131,5 +157,8 @@ export class PanelManager implements vscode.Disposable {
     this.panel?.dispose();
     this._onDidRequestRefresh.dispose();
     this._onDidChangeView.dispose();
+    this._onDidRequestFileDeps.dispose();
+    this._onDidRequestFileCalls.dispose();
+    this._onDidRequestFileImporters.dispose();
   }
 }
