@@ -1,0 +1,170 @@
+{
+  "name": "code-atlas",
+  "displayName": "Code Atlas",
+  "description": "Visualize application architecture inside your IDE — dependency graphs, call graphs, component trees, route maps, and architectural insights.",
+  "version": "0.1.0",
+  "publisher": "code-atlas",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/code-atlas/code-atlas"
+  },
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Visualization",
+    "Other"
+  ],
+  "keywords": [
+    "architecture",
+    "dependency graph",
+    "visualization",
+    "code map",
+    "call graph",
+    "component tree"
+  ],
+  "main": "./dist/extension.js",
+  "activationEvents": [
+    "onCommand:code-atlas.showGraph",
+    "onCommand:code-atlas.showDependencyGraph",
+    "onCommand:code-atlas.showCallGraph",
+    "onCommand:code-atlas.showComponentTree",
+    "onCommand:code-atlas.showRouteMap",
+    "onCommand:code-atlas.refresh",
+    "onCommand:code-atlas.exportGraph"
+  ],
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "code-atlas-sidebar",
+          "title": "Code Atlas",
+          "icon": "media/sidebar-icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "code-atlas-sidebar": [
+        {
+          "id": "codeAtlas.views",
+          "name": "Code Atlas"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "codeAtlas.views",
+        "contents": "Open a workspace with TypeScript or JavaScript files to visualize its architecture.\n[Show Architecture Map](command:code-atlas.showGraph)",
+        "when": "workbenchState == empty"
+      }
+    ],
+    "commands": [
+      {
+        "command": "code-atlas.showGraph",
+        "title": "Show Architecture Map",
+        "category": "Code Atlas"
+      },
+      {
+        "command": "code-atlas.showDependencyGraph",
+        "title": "Show Dependency Graph",
+        "category": "Code Atlas"
+      },
+      {
+        "command": "code-atlas.showCallGraph",
+        "title": "Show Call Graph",
+        "category": "Code Atlas"
+      },
+      {
+        "command": "code-atlas.showComponentTree",
+        "title": "Show Component Tree",
+        "category": "Code Atlas"
+      },
+      {
+        "command": "code-atlas.showRouteMap",
+        "title": "Show Route Map",
+        "category": "Code Atlas"
+      },
+      {
+        "command": "code-atlas.refresh",
+        "title": "Refresh",
+        "category": "Code Atlas"
+      },
+      {
+        "command": "code-atlas.exportGraph",
+        "title": "Export Graph",
+        "category": "Code Atlas"
+      }
+    ],
+    "configuration": {
+      "title": "Code Atlas",
+      "properties": {
+        "codeAtlas.include": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            "**/*.ts",
+            "**/*.tsx",
+            "**/*.js",
+            "**/*.jsx"
+          ],
+          "description": "Glob patterns for files to include in analysis."
+        },
+        "codeAtlas.exclude": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            "**/node_modules/**",
+            "**/dist/**",
+            "**/build/**",
+            "**/.git/**"
+          ],
+          "description": "Glob patterns for files to exclude from analysis."
+        },
+        "codeAtlas.maxFiles": {
+          "type": "number",
+          "default": 1000,
+          "description": "Maximum number of files to analyze."
+        },
+        "codeAtlas.defaultLayout": {
+          "type": "string",
+          "enum": [
+            "dagre",
+            "cose",
+            "breadthfirst",
+            "grid",
+            "circle"
+          ],
+          "default": "dagre",
+          "description": "Default graph layout algorithm."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "node scripts/build.mjs --production",
+    "build": "node scripts/build.mjs",
+    "watch": "node scripts/build.mjs --watch",
+    "compile": "tsc",
+    "lint": "tsc --noEmit",
+    "pretest": "tsc",
+    "test": "mocha 'out/test/**/*.test.js' --timeout 10000",
+    "package": "vsce package"
+  },
+  "devDependencies": {
+    "@types/mocha": "^10.0.10",
+    "@types/node": "^25.4.0",
+    "@types/vscode": "^1.110.0",
+    "@vscode/vsce": "^3.7.1",
+    "cytoscape": "^3.33.1",
+    "cytoscape-dagre": "^2.5.0",
+    "dagre": "^0.8.5",
+    "esbuild": "^0.27.3",
+    "mocha": "^11.7.5",
+    "typescript": "^5.9.3"
+  }
+}
