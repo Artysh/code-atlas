@@ -44,8 +44,6 @@ export function getWebviewContent(webview: vscode.Webview, extensionUri: vscode.
           <select id="layout-selector" title="Layout algorithm">
             <option value="dagre">Top to Bottom</option>
             <option value="dagreLR">Left to Right</option>
-            <option value="cose">Force-Directed</option>
-            <option value="breadthfirst">Breadthfirst</option>
             <option value="grid">Grid</option>
             <option value="circle">Circle</option>
           </select>
@@ -74,6 +72,7 @@ export function getWebviewContent(webview: vscode.Webview, extensionUri: vscode.
           <svg width="16" height="16" viewBox="0 0 16 16"><path d="M8 2v9M4.5 8L8 11.5 11.5 8M3 14h10" stroke="currentColor" stroke-width="1.4" fill="none"/></svg>
         </button>
         <div class="toolbar-divider"></div>
+        <button id="btn-filter" class="tb tb-label" title="Show/hide node types">Filter</button>
         <button id="btn-toggle-sidebar" class="tb tb-label" title="Toggle insights panel">Insights</button>
       </div>
 
@@ -141,10 +140,12 @@ export function getWebviewContent(webview: vscode.Webview, extensionUri: vscode.
     <!-- ===== POPUPS ===== -->
     <div id="tooltip" class="hidden"></div>
     <div id="context-menu" class="hidden"></div>
+    <div id="filter-popup" class="hidden"></div>
     <div id="export-menu" class="hidden">
       <button class="popup-item" data-format="png">Export as PNG</button>
       <button class="popup-item" data-format="svg">Export as SVG</button>
       <button class="popup-item" data-format="json">Export as JSON</button>
+      <button class="popup-item" data-format="drawio">Export as Draw.io</button>
     </div>
   </div>
   <script nonce="${nonce}" src="${scriptUri}"></script>

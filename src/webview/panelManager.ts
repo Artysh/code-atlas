@@ -5,6 +5,16 @@ import { getWebviewContent } from './contentProvider';
 export class PanelManager implements vscode.Disposable {
   private panel: vscode.WebviewPanel | undefined;
   private readonly extensionUri: vscode.Uri;
+  private _webviewReady = false;
+  private _messageQueue: ToWebviewMessage[] = [];
+  private _readyResolvers: (() => void)[] = [];
+
+  /**
+   * When true, the panel is displaying a file-specific view
+   * (file graph, file calls, file importers) and should NOT
+   * be overwritten by a full refresh triggered by changeView.
+   */
+  private _fileViewActive = false;
 
   private readonly _onDidRequestRefresh = new vscode.EventEmitter<void>();
   private readonly _onDidChangeView = new vscode.EventEmitter<ViewType>();
@@ -21,12 +31,23 @@ export class PanelManager implements vscode.Disposable {
     this.extensionUri = context.extensionUri;
   }
 
+  get isFileViewActive(): boolean {
+    return this._fileViewActive;
+  }
+
+  setFileViewActive(active: boolean): void {
+    this._fileViewActive = active;
+  }
+
   show(viewType: ViewType = 'architecture'): void {
     if (this.panel) {
       this.panel.reveal();
       this.postMessage({ command: 'setView', view: viewType });
       return;
     }
+
+    this._webviewReady = false;
+    this._messageQueue = [];
 
     this.panel = vscode.window.createWebviewPanel(
       'codeAtlas',
@@ -49,7 +70,14 @@ export class PanelManager implements vscode.Disposable {
 
     this.panel.onDidDispose(() => {
       this.panel = undefined;
+      this._webviewReady = false;
+      this._messageQueue = [];
+      this._fileViewActive = false;
+      for (const resolver of this._readyResolvers) { resolver(); }
+      this._readyResolvers = [];
     }, null, this.context.subscriptions);
+
+    this._messageQueue.push({ command: 'setView', view: viewType });
   }
 
   sendGraph(nodes: CyNodeData[], edges: CyEdgeData[]): void {
@@ -76,12 +104,40 @@ export class PanelManager implements vscode.Disposable {
     this.postMessage({ command: 'setFileDeps', data: deps });
   }
 
+  waitForReady(): Promise<void> {
+    if (this._webviewReady) { return Promise.resolve(); }
+    return new Promise<void>((resolve) => {
+      this._readyResolvers.push(resolve);
+      setTimeout(() => {
+        const idx = this._readyResolvers.indexOf(resolve);
+        if (idx !== -1) {
+          this._readyResolvers.splice(idx, 1);
+          resolve();
+        }
+      }, 8000);
+    });
+  }
+
   get isVisible(): boolean {
     return this.panel?.visible ?? false;
   }
 
   private postMessage(message: ToWebviewMessage): void {
-    this.panel?.webview.postMessage(message);
+    if (!this.panel) { return; }
+
+    if (this._webviewReady) {
+      this.panel.webview.postMessage(message);
+    } else {
+      this._messageQueue.push(message);
+    }
+  }
+
+  private flushMessageQueue(): void {
+    if (!this.panel) { return; }
+    for (const msg of this._messageQueue) {
+      this.panel.webview.postMessage(msg);
+    }
+    this._messageQueue = [];
   }
 
   private async handleMessage(message: ToExtensionMessage): Promise<void> {
@@ -109,10 +165,14 @@ export class PanelManager implements vscode.Disposable {
       }
 
       case 'requestRefresh':
+        this._fileViewActive = false;
         this._onDidRequestRefresh.fire();
         break;
 
       case 'changeView':
+        if (this._fileViewActive) {
+          this._fileViewActive = false;
+        }
         this._onDidChangeView.fire(message.view);
         break;
 
@@ -133,10 +193,12 @@ export class PanelManager implements vscode.Disposable {
           png: { 'PNG Image': ['png'] },
           svg: { 'SVG Image': ['svg'] },
           json: { 'JSON File': ['json'] },
+          drawio: { 'Draw.io Diagram': ['drawio'] },
         };
+        const ext = message.format === 'drawio' ? 'drawio' : message.format;
         const uri = await vscode.window.showSaveDialog({
           filters: filterMap[message.format],
-          defaultUri: vscode.Uri.file(`code-atlas-export.${message.format}`),
+          defaultUri: vscode.Uri.file(`code-atlas-export.${ext}`),
         });
         if (uri) {
           const content = message.format === 'png'
@@ -149,6 +211,10 @@ export class PanelManager implements vscode.Disposable {
       }
 
       case 'ready':
+        this._webviewReady = true;
+        this.flushMessageQueue();
+        for (const resolver of this._readyResolvers) { resolver(); }
+        this._readyResolvers = [];
         break;
     }
   }

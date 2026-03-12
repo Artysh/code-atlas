@@ -8,6 +8,7 @@ interface VsCodeApi {
 export class Controls {
   private viewSelector: HTMLSelectElement;
   private layoutSelector: HTMLSelectElement;
+  private _suppressViewChange = false;
 
   constructor(private renderer: GraphRenderer, private vscode: VsCodeApi) {
     this.viewSelector = document.getElementById('view-selector') as HTMLSelectElement;
@@ -21,6 +22,7 @@ export class Controls {
     const sidebar = document.getElementById('sidebar')!;
 
     this.viewSelector.addEventListener('change', () => {
+      if (this._suppressViewChange) { return; }
       const view = this.viewSelector.value as ViewType;
       this.vscode.postMessage({ command: 'changeView', view });
     });
@@ -40,12 +42,13 @@ export class Controls {
 
     btnToggleSidebar.addEventListener('click', () => {
       sidebar.classList.toggle('hidden');
-      // Trigger resize so Cytoscape redraws
       setTimeout(() => this.renderer.getCy().resize(), 100);
     });
   }
 
   setActiveView(view: ViewType): void {
+    this._suppressViewChange = true;
     this.viewSelector.value = view;
+    this._suppressViewChange = false;
   }
 }

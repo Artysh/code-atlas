@@ -4,7 +4,7 @@ export type EdgeType = 'import' | 'call' | 'render' | 'route' | 'extends' | 'imp
 
 export type ViewType = 'architecture' | 'dependency' | 'callGraph' | 'componentTree' | 'routeMap' | 'userFlow';
 
-export type LayoutType = 'dagre' | 'dagreLR' | 'cose' | 'breadthfirst' | 'grid' | 'circle';
+export type LayoutType = 'dagre' | 'dagreLR' | 'grid' | 'circle';
 
 export type InsightSeverity = 'error' | 'warning' | 'info';
 
@@ -135,7 +135,7 @@ export type ToWebviewMessage =
 export type ToExtensionMessage =
   | { command: 'openFile'; filePath: string; line?: number; column?: number }
   | { command: 'requestRefresh' }
-  | { command: 'saveExport'; format: 'png' | 'svg' | 'json'; data: string }
+  | { command: 'saveExport'; format: 'png' | 'svg' | 'json' | 'drawio'; data: string }
   | { command: 'changeView'; view: ViewType }
   | { command: 'changeLayout'; layout: LayoutType }
   | { command: 'getFileDeps'; filePath: string }

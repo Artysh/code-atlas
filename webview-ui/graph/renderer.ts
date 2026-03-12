@@ -63,6 +63,7 @@ export class GraphRenderer {
   }
 
   setData(nodes: CyNodeData[], edges: CyEdgeData[]): void {
+    this._savedParents.clear();
     this.cy.elements().remove();
     this.cy.add(nodes as cytoscape.ElementDefinition[]);
     this.cy.add(edges as cytoscape.ElementDefinition[]);
@@ -76,91 +77,101 @@ export class GraphRenderer {
       stop: () => { this.fitToContent(); },
     };
 
+    const needsFlatten = name === 'grid' || name === 'circle';
+
+    if (needsFlatten) {
+      this.flattenParents();
+    } else {
+      this.restoreParents();
+    }
+
     const layoutOptions: Record<string, cytoscape.LayoutOptions> = {
       dagre: {
         name: 'dagre',
         rankDir: 'LR',
-        nodeSep: 120,
-        rankSep: 160,
-        edgeSep: 50,
+        nodeSep: 60,
+        rankSep: 80,
+        edgeSep: 30,
         animate: true,
-        animationDuration: 600,
+        animationDuration: 500,
         animationEasing: 'ease-in-out-cubic',
         fit: false,
-        padding: 60,
+        padding: 40,
         ...commonStop,
       } as cytoscape.LayoutOptions,
       dagreLR: {
         name: 'dagre',
         rankDir: 'TB',
-        nodeSep: 100,
-        rankSep: 200,
-        edgeSep: 40,
+        nodeSep: 50,
+        rankSep: 100,
+        edgeSep: 25,
         animate: true,
-        animationDuration: 600,
+        animationDuration: 500,
         animationEasing: 'ease-in-out-cubic',
         fit: false,
-        padding: 60,
-        ...commonStop,
-      } as cytoscape.LayoutOptions,
-      cose: {
-        name: 'cose',
-        idealEdgeLength: () => 280,
-        nodeOverlap: 20,
-        componentSpacing: 200,
-        nodeRepulsion: () => 50000,
-        gravity: 0.3,
-        nestingFactor: 1.2,
-        avoidOverlap: true,
-        animate: true,
-        animationDuration: 800,
-        animationEasing: 'ease-in-out-cubic',
-        fit: false,
-        padding: 80,
-        ...commonStop,
-      } as cytoscape.LayoutOptions,
-      breadthfirst: {
-        name: 'breadthfirst',
-        directed: true,
-        avoidOverlap: true,
-        spacingFactor: 3.0,
-        maximal: false,
-        animate: true,
-        animationDuration: 600,
-        animationEasing: 'ease-in-out-cubic',
-        fit: false,
-        padding: 80,
+        padding: 40,
         ...commonStop,
       } as cytoscape.LayoutOptions,
       grid: {
         name: 'grid',
-        rows: undefined,
-        cols: undefined,
         avoidOverlap: true,
+        condense: true,
         animate: true,
-        animationDuration: 500,
+        animationDuration: 400,
         animationEasing: 'ease-in-out-cubic',
         fit: false,
-        padding: 80,
-        spacingFactor: 2.0,
+        padding: 30,
+        spacingFactor: 1.2,
         ...commonStop,
       } as cytoscape.LayoutOptions,
       circle: {
-        name: 'circle',
+        name: 'concentric',
         avoidOverlap: true,
-        startAngle: 0,
+        minNodeSpacing: 40,
+        concentric: (node: cytoscape.NodeSingular) => node.connectedEdges().length,
+        levelWidth: () => 2,
         animate: true,
         animationDuration: 500,
         animationEasing: 'ease-in-out-cubic',
         fit: false,
-        padding: 80,
-        spacingFactor: 2.5,
+        padding: 30,
         ...commonStop,
       } as cytoscape.LayoutOptions,
     };
 
     const options = layoutOptions[name] || layoutOptions.dagre;
-    this.cy.layout(options).run();
+
+    if (needsFlatten) {
+      const leafNodes = this.cy.nodes().filter(n => !n.isParent());
+      leafNodes.layout(options).run();
+    } else {
+      this.cy.layout(options).run();
+    }
+  }
+
+  private _savedParents = new Map<string, string>();
+
+  private flattenParents(): void {
+    this._savedParents.clear();
+    this.cy.nodes().forEach(node => {
+      const parentId = node.data('parent');
+      if (parentId) {
+        this._savedParents.set(node.id(), parentId);
+        node.move({ parent: null });
+      }
+    });
+    this.cy.nodes().filter(n => n.isParent() || n.data('type') === 'module').style('display', 'none');
+  }
+
+  private restoreParents(): void {
+    this.cy.nodes().filter(n => n.data('type') === 'module').style('display', 'element');
+    this._savedParents.forEach((parentId, nodeId) => {
+      const node = this.cy.getElementById(nodeId);
+      if (node.length > 0) {
+        node.move({ parent: parentId });
+      }
+    });
+    this._savedParents.clear();
   }
 
   private fitToContent(): void {
@@ -319,37 +330,37 @@ export class GraphRenderer {
           'label': 'data(label)',
           'text-valign': 'center',
           'text-halign': 'center',
-          'font-size': 14,
+          'font-size': 12,
           'font-family': '-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif',
           'font-weight': 500,
           'color': '#FFFFFF',
           'text-outline-width': 0,
           'background-color': (ele: cytoscape.NodeSingular) =>
             NODE_COLORS[ele.data('type')] || '#888',
-          'background-opacity': 0.94,
+          'background-opacity': 0.92,
           'shape': 'round-rectangle',
           'width': (ele: cytoscape.NodeSingular) => {
             const label = ele.data('label') || '';
-            return Math.max(label.length * 10 + 36, 120);
+            return Math.max(label.length * 8 + 28, 90);
           },
-          'height': 44,
-          'padding': '12px',
-          'border-width': 2,
+          'height': 34,
+          'padding': '8px',
+          'border-width': 1.5,
           'border-color': (ele: cytoscape.NodeSingular) =>
             NODE_BORDER_COLORS[ele.data('type')] || '#666',
           'border-opacity': 1,
           'text-wrap': 'ellipsis',
           'text-max-width': (ele: cytoscape.NodeSingular) => {
             const label = ele.data('label') || '';
-            return String(Math.max(label.length * 10 + 12, 96)) + 'px';
+            return String(Math.max(label.length * 8 + 8, 80)) + 'px';
           },
           'text-overflow-wrap': 'anywhere',
-          'overlay-padding': 6,
-          'shadow-blur': 12,
-          'shadow-color': 'rgba(0,0,0,0.4)',
+          'overlay-padding': 4,
+          'shadow-blur': 8,
+          'shadow-color': 'rgba(0,0,0,0.3)',
           'shadow-offset-x': 0,
-          'shadow-offset-y': 4,
-          'shadow-opacity': 0.7,
+          'shadow-offset-y': 2,
+          'shadow-opacity': 0.5,
           'transition-property': 'border-color, border-width, opacity, shadow-blur, shadow-opacity, background-opacity',
           'transition-duration': 300,
           'transition-timing-function': 'ease-in-out-sine',
@@ -360,7 +371,7 @@ export class GraphRenderer {
       {
         selector: 'node:parent',
         style: {
-          'background-opacity': 0.08,
+          'background-opacity': 0.06,
           'background-color': (ele: cytoscape.NodeSingular) => {
             const children = ele.children();
             if (children.length > 0) {
@@ -369,7 +380,7 @@ export class GraphRenderer {
             }
             return '#61AFEF';
           },
-          'border-width': 1.5,
+          'border-width': 1,
           'border-color': (ele: cytoscape.NodeSingular) => {
             const children = ele.children();
             if (children.length > 0) {
@@ -378,20 +389,18 @@ export class GraphRenderer {
             }
             return '#61AFEF';
           },
-          'border-opacity': 0.5,
-          'border-style': 'solid',
+          'border-opacity': 0.4,
+          'border-style': 'dashed',
           'text-valign': 'top',
           'text-halign': 'center',
-          'font-size': 13,
+          'font-size': 11,
           'font-weight': 600,
-          'color': '#ABB2BF',
-          'padding': '36px',
+          'color': '#888',
+          'padding': '18px',
           'shape': 'round-rectangle',
-          'text-margin-y': -12,
-          'shadow-blur': 6,
-          'shadow-color': 'rgba(0,0,0,0.15)',
-          'shadow-offset-y': 2,
-          'shadow-opacity': 0.5,
+          'text-margin-y': -8,
+          'shadow-blur': 0,
+          'shadow-opacity': 0,
           'text-transform': 'uppercase',
         } as unknown as cytoscape.Css.Node,
       },
@@ -400,7 +409,12 @@ export class GraphRenderer {
       {
         selector: 'node:child',
         style: {
-          'font-size': 13,
+          'font-size': 11,
+          'width': (ele: cytoscape.NodeSingular) => {
+            const label = ele.data('label') || '';
+            return Math.max(label.length * 7 + 20, 70);
+          },
+          'height': 28,
         } as unknown as cytoscape.Css.Node,
       },
 
@@ -417,7 +431,7 @@ export class GraphRenderer {
       {
         selector: 'edge',
         style: {
-          'width': 2.5,
+          'width': 1.5,
           'line-color': (ele: cytoscape.EdgeSingular) => {
             const type = ele.data('type') || 'import';
             return (EDGE_GRADIENT_COLORS[type] || EDGE_GRADIENT_COLORS.import)[0];
@@ -428,17 +442,17 @@ export class GraphRenderer {
           },
           'target-arrow-shape': 'vee',
           'curve-style': 'bezier',
-          'control-point-step-size': 60,
-          'arrow-scale': 1.3,
-          'opacity': 0.55,
+          'control-point-step-size': 40,
+          'arrow-scale': 1.0,
+          'opacity': 0.5,
           'label': 'data(label)',
-          'font-size': 11,
+          'font-size': 9,
           'text-rotation': 'autorotate',
-          'color': '#999',
+          'color': '#888',
           'text-background-color': '#1E1E1E',
           'text-background-opacity': 0.85,
-          'text-background-padding': '3px',
-          'text-margin-y': -12,
+          'text-background-padding': '2px',
+          'text-margin-y': -8,
           'line-cap': 'round',
           'transition-property': 'opacity, line-color, width, target-arrow-color',
           'transition-duration': 300,
@@ -449,17 +463,17 @@ export class GraphRenderer {
         selector: 'edge[type = "call"]',
         style: {
           'line-style': 'dashed',
-          'line-dash-pattern': [10, 5],
+          'line-dash-pattern': [8, 4],
           'line-color': '#61AFEF',
           'target-arrow-color': '#61AFEF',
-          'width': 2,
+          'width': 1.5,
         } as unknown as cytoscape.Css.Edge,
       },
       {
         selector: 'edge[type = "render"]',
         style: {
           'line-style': 'dashed',
-          'line-dash-pattern': [4, 4],
+          'line-dash-pattern': [4, 3],
           'line-color': '#56B6C2',
           'target-arrow-color': '#56B6C2',
         } as unknown as cytoscape.Css.Edge,
@@ -470,7 +484,7 @@ export class GraphRenderer {
           'line-color': '#E5C07B',
           'target-arrow-color': '#E5C07B',
           'target-arrow-shape': 'triangle-tee',
-          'width': 3,
+          'width': 2,
         } as unknown as cytoscape.Css.Edge,
       },
       {
@@ -479,7 +493,7 @@ export class GraphRenderer {
           'line-color': '#E06C75',
           'target-arrow-color': '#E06C75',
           'target-arrow-shape': 'triangle',
-          'width': 3,
+          'width': 2,
           'line-style': 'solid',
         } as unknown as cytoscape.Css.Edge,
       },
@@ -488,9 +502,9 @@ export class GraphRenderer {
       {
         selector: 'edge:active',
         style: {
-          'opacity': 1,
-          'width': 4,
-          'overlay-opacity': 0.05,
+          'opacity': 0.9,
+          'width': 3,
+          'overlay-opacity': 0.04,
         } as unknown as cytoscape.Css.Edge,
       },
 
@@ -498,10 +512,10 @@ export class GraphRenderer {
       {
         selector: '.highlighted',
         style: {
-          'border-width': 3,
+          'border-width': 2.5,
           'border-color': '#FFD700',
-          'shadow-blur': 20,
-          'shadow-color': 'rgba(255, 215, 0, 0.4)',
+          'shadow-blur': 14,
+          'shadow-color': 'rgba(255, 215, 0, 0.35)',
           'shadow-opacity': 1,
           'z-index': 999,
         } as unknown as cytoscape.Css.Node,
@@ -509,7 +523,7 @@ export class GraphRenderer {
       {
         selector: 'edge.highlighted',
         style: {
-          'width': 4,
+          'width': 3,
           'opacity': 1,
           'z-index': 999,
           'line-color': '#FFD700',
@@ -519,16 +533,16 @@ export class GraphRenderer {
       {
         selector: '.dimmed',
         style: {
-          'opacity': 0.1,
+          'opacity': 0.12,
         } as unknown as cytoscape.Css.Node,
       },
       {
         selector: '.focused',
         style: {
-          'border-width': 4,
+          'border-width': 2.5,
           'border-color': '#E06C75',
-          'shadow-blur': 24,
-          'shadow-color': 'rgba(224, 108, 117, 0.5)',
+          'shadow-blur': 16,
+          'shadow-color': 'rgba(224, 108, 117, 0.4)',
           'shadow-opacity': 1,
           'z-index': 1000,
         } as unknown as cytoscape.Css.Node,
@@ -536,9 +550,9 @@ export class GraphRenderer {
       {
         selector: 'node.hover-glow',
         style: {
-          'shadow-blur': 18,
-          'shadow-opacity': 0.9,
-          'border-width': 3,
+          'shadow-blur': 12,
+          'shadow-opacity': 0.8,
+          'border-width': 2,
           'background-opacity': 1,
           'z-index': 500,
         } as unknown as cytoscape.Css.Node,
@@ -546,11 +560,11 @@ export class GraphRenderer {
       {
         selector: 'node:selected',
         style: {
-          'border-width': 3,
+          'border-width': 2,
           'border-color': '#FFFFFF',
-          'shadow-blur': 16,
-          'shadow-color': 'rgba(255,255,255,0.25)',
-          'shadow-opacity': 0.9,
+          'shadow-blur': 10,
+          'shadow-color': 'rgba(255,255,255,0.2)',
+          'shadow-opacity': 0.8,
         } as unknown as cytoscape.Css.Node,
       },
     ];

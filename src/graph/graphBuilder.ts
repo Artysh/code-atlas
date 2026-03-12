@@ -256,6 +256,68 @@ export class GraphBuilder {
       }
     }
 
+    if (nodes.length === 0) {
+      return this.buildEntryPointMap(parsedFiles, root);
+    }
+
+    return { nodes, edges };
+  }
+
+  private buildEntryPointMap(
+    parsedFiles: ParsedFile[],
+    root: string,
+  ): { nodes: CyNodeData[]; edges: CyEdgeData[] } {
+    const nodes: CyNodeData[] = [];
+    const edges: CyEdgeData[] = [];
+    const addedNodes = new Set<string>();
+
+    const importedFiles = new Set<string>();
+    for (const file of parsedFiles) {
+      for (const imp of file.imports) {
+        const resolved = this.resolveImportPath(file.filePath, imp.source, root);
+        if (resolved) { importedFiles.add(resolved); }
+      }
+    }
+
+    const entryFiles = parsedFiles.filter(f =>
+      !importedFiles.has(f.filePath) ||
+      path.basename(f.filePath).match(/^(index|main|app|server)\./i),
+    );
+
+    const addNode = (filePath: string) => {
+      if (addedNodes.has(filePath)) { return; }
+      addedNodes.add(filePath);
+      const file = this.fileMap.get(filePath);
+      nodes.push({
+        data: {
+          id: filePath,
+          label: path.basename(filePath),
+          type: file ? this.inferFileType(file) : 'file',
+          filePath,
+        },
+      });
+    };
+
+    for (const entry of entryFiles) {
+      addNode(entry.filePath);
+      for (const imp of entry.imports) {
+        const resolved = this.resolveImportPath(entry.filePath, imp.source, root);
+        if (!resolved || !this.fileMap.has(resolved)) { continue; }
+        addNode(resolved);
+        edges.push({
+          data: {
+            id: `${entry.filePath}->${resolved}`,
+            source: entry.filePath,
+            target: resolved,
+            type: 'import',
+            label: imp.specifiers.length <= 3
+              ? imp.specifiers.join(', ')
+              : `${imp.specifiers.length} imports`,
+          },
+        });
+      }
+    }
+
     return { nodes, edges };
   }
 
@@ -410,6 +472,7 @@ export class GraphBuilder {
     targetFilePath: string,
     root: string,
   ): { nodes: CyNodeData[]; edges: CyEdgeData[] } {
+    this.ensureFileMap(parsedFiles);
     const nodes: CyNodeData[] = [];
     const edges: CyEdgeData[] = [];
     const addedNodes = new Set<string>();
@@ -497,10 +560,7 @@ export class GraphBuilder {
     targetFilePath: string,
     root: string,
   ): { nodes: CyNodeData[]; edges: CyEdgeData[] } {
-    this.fileMap.clear();
-    for (const file of parsedFiles) {
-      this.fileMap.set(file.filePath, file);
-    }
+    this.ensureFileMap(parsedFiles);
 
     const nodes: CyNodeData[] = [];
     const edges: CyEdgeData[] = [];
@@ -572,10 +632,7 @@ export class GraphBuilder {
     targetFilePath: string,
     root: string,
   ): { nodes: CyNodeData[]; edges: CyEdgeData[] } {
-    this.fileMap.clear();
-    for (const file of parsedFiles) {
-      this.fileMap.set(file.filePath, file);
-    }
+    this.ensureFileMap(parsedFiles);
 
     const nodes: CyNodeData[] = [];
     const edges: CyEdgeData[] = [];
@@ -636,6 +693,13 @@ export class GraphBuilder {
     }
 
     return { nodes, edges };
+  }
+
+  private ensureFileMap(parsedFiles: ParsedFile[]): void {
+    this.fileMap.clear();
+    for (const file of parsedFiles) {
+      this.fileMap.set(file.filePath, file);
+    }
   }
 
   private resolveImportPath(fromFile: string, importPath: string, root: string): string | null {

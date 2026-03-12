@@ -23,7 +23,8 @@ let refreshDebounce: ReturnType<typeof setTimeout> | undefined;
 
 let lastParsedFiles: ParsedFile[] = [];
 let lastRoutes: ParsedRoute[] = [];
-let pendingFocusFile: string | null = null;
+
+let refreshInProgress = false;
 
 export function activate(context: vscode.ExtensionContext): void {
   try {
@@ -54,29 +55,31 @@ export function activate(context: vscode.ExtensionContext): void {
         panelManager.show(currentView);
       }),
 
-      vscode.commands.registerCommand('code-atlas.showFileInGraph', (uri?: vscode.Uri) => {
+      vscode.commands.registerCommand('code-atlas.showFileInGraph', async (uri?: vscode.Uri) => {
         const filePath = uri?.fsPath || vscode.window.activeTextEditor?.document.uri.fsPath;
-        if (!filePath) { return; }
-        pendingFocusFile = filePath;
-        showGraph(currentView === 'architecture' ? 'dependency' : currentView);
+        if (!filePath) {
+          vscode.window.showWarningMessage('Code Atlas: No file selected.');
+          return;
+        }
+        await showFileGraph(filePath);
       }),
 
-      vscode.commands.registerCommand('code-atlas.showFileGraph', (uri?: vscode.Uri) => {
+      vscode.commands.registerCommand('code-atlas.showFileGraph', async (uri?: vscode.Uri) => {
         const filePath = uri?.fsPath || vscode.window.activeTextEditor?.document.uri.fsPath;
         if (!filePath) { return; }
-        showFileGraph(filePath);
+        await showFileGraph(filePath);
       }),
 
-      vscode.commands.registerCommand('code-atlas.showFileCalls', (uri?: vscode.Uri) => {
+      vscode.commands.registerCommand('code-atlas.showFileCalls', async (uri?: vscode.Uri) => {
         const filePath = uri?.fsPath || vscode.window.activeTextEditor?.document.uri.fsPath;
         if (!filePath) { return; }
-        showFileCalls(filePath);
+        await showFileCalls(filePath);
       }),
 
-      vscode.commands.registerCommand('code-atlas.showFileImporters', (uri?: vscode.Uri) => {
+      vscode.commands.registerCommand('code-atlas.showFileImporters', async (uri?: vscode.Uri) => {
         const filePath = uri?.fsPath || vscode.window.activeTextEditor?.document.uri.fsPath;
         if (!filePath) { return; }
-        showFileImporters(filePath);
+        await showFileImporters(filePath);
       }),
     );
 
@@ -86,7 +89,8 @@ export function activate(context: vscode.ExtensionContext): void {
       refresh();
     });
 
-    panelManager.onDidRequestFileDeps((filePath) => {
+    panelManager.onDidRequestFileDeps(async (filePath) => {
+      await ensureParsedData();
       const deps = computeFileDeps(filePath);
       if (deps) { panelManager.sendFileDeps(deps); }
     });
@@ -101,6 +105,7 @@ export function activate(context: vscode.ExtensionContext): void {
 
     cacheManager.onDidInvalidate(() => {
       if (!panelManager.isVisible) { return; }
+      if (panelManager.isFileViewActive) { return; }
       if (refreshDebounce) { clearTimeout(refreshDebounce); }
       refreshDebounce = setTimeout(() => refresh(), 1000);
     });
@@ -118,7 +123,9 @@ export function activate(context: vscode.ExtensionContext): void {
 
 async function showGraph(view: ViewType): Promise<void> {
   currentView = view;
+  panelManager.setFileViewActive(false);
   panelManager.show(view);
+  await panelManager.waitForReady();
   await refresh();
 }
 
@@ -126,14 +133,20 @@ async function showFileGraph(filePath: string): Promise<void> {
   const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
   if (!workspaceRoot) { return; }
 
+  await ensureParsedData();
+
+  panelManager.setFileViewActive(true);
   panelManager.show('dependency');
+  await panelManager.waitForReady();
   panelManager.sendLoading(true);
 
   try {
-    await ensureParsedData();
-
     const { nodes, edges } = graphBuilder.buildFileGraph(lastParsedFiles, filePath, workspaceRoot);
+    if (nodes.length === 0) {
+      vscode.window.showInformationMessage(`Code Atlas: No connections found for ${path.basename(filePath)}`);
+    }
     panelManager.sendGraph(nodes, edges);
+    panelManager.focusFile(filePath);
 
     const deps = computeFileDeps(filePath);
     if (deps) { panelManager.sendFileDeps(deps); }
@@ -149,12 +162,18 @@ async function showFileCalls(filePath: string): Promise<void> {
   const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
   if (!workspaceRoot) { return; }
 
+  await ensureParsedData();
+
+  panelManager.setFileViewActive(true);
   panelManager.show('callGraph');
+  await panelManager.waitForReady();
   panelManager.sendLoading(true);
 
   try {
-    await ensureParsedData();
     const { nodes, edges } = graphBuilder.buildFileCalls(lastParsedFiles, filePath, workspaceRoot);
+    if (nodes.length === 0) {
+      vscode.window.showInformationMessage(`Code Atlas: No callable symbols found in ${path.basename(filePath)}`);
+    }
     panelManager.sendGraph(nodes, edges);
 
     const deps = computeFileDeps(filePath);
@@ -171,13 +190,20 @@ async function showFileImporters(filePath: string): Promise<void> {
   const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
   if (!workspaceRoot) { return; }
 
+  await ensureParsedData();
+
+  panelManager.setFileViewActive(true);
   panelManager.show('dependency');
+  await panelManager.waitForReady();
   panelManager.sendLoading(true);
 
   try {
-    await ensureParsedData();
     const { nodes, edges } = graphBuilder.buildFileImporters(lastParsedFiles, filePath, workspaceRoot);
+    if (nodes.length <= 1) {
+      vscode.window.showInformationMessage(`Code Atlas: No files import ${path.basename(filePath)}`);
+    }
     panelManager.sendGraph(nodes, edges);
+    panelManager.focusFile(filePath);
 
     const deps = computeFileDeps(filePath);
     if (deps) { panelManager.sendFileDeps(deps); }
@@ -197,16 +223,17 @@ async function ensureParsedData(): Promise<void> {
   lastRoutes = [];
 
   for (const filePath of filePaths) {
+    const content = fs.readFileSync(filePath, 'utf-8');
+
     let parsed = cacheManager.get(filePath);
     if (!parsed) {
-      const content = fs.readFileSync(filePath, 'utf-8');
       parsed = astParser.parseFile(filePath, content);
       cacheManager.set(filePath, parsed);
-
-      const routes = routeParser.parseFile(filePath, content);
-      lastRoutes.push(...routes);
     }
     lastParsedFiles.push(parsed);
+
+    const routes = routeParser.parseFile(filePath, content);
+    lastRoutes.push(...routes);
   }
 }
 
@@ -282,12 +309,16 @@ function resolveImportForDeps(fromDir: string, importPath: string, parsedFiles: 
 }
 
 async function refresh(): Promise<void> {
+  if (refreshInProgress) { return; }
+  if (panelManager.isFileViewActive) { return; }
+
   const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
   if (!workspaceRoot) {
     vscode.window.showWarningMessage('Code Atlas: No workspace folder open.');
     return;
   }
 
+  refreshInProgress = true;
   panelManager.sendLoading(true);
 
   try {
@@ -304,17 +335,17 @@ async function refresh(): Promise<void> {
       async (progress) => {
         for (let i = 0; i < filePaths.length; i++) {
           const filePath = filePaths[i];
+          const content = fs.readFileSync(filePath, 'utf-8');
 
           let parsed = cacheManager.get(filePath);
           if (!parsed) {
-            const content = fs.readFileSync(filePath, 'utf-8');
             parsed = astParser.parseFile(filePath, content);
             cacheManager.set(filePath, parsed);
-
-            const routes = routeParser.parseFile(filePath, content);
-            lastRoutes.push(...routes);
           }
           lastParsedFiles.push(parsed);
+
+          const routes = routeParser.parseFile(filePath, content);
+          lastRoutes.push(...routes);
 
           if (i % 50 === 0) {
             progress.report({
@@ -331,17 +362,11 @@ async function refresh(): Promise<void> {
 
     panelManager.sendGraph(nodes, edges);
     panelManager.sendInsights(insights);
-
-    if (pendingFocusFile) {
-      setTimeout(() => {
-        panelManager.focusFile(pendingFocusFile!);
-        pendingFocusFile = null;
-      }, 600);
-    }
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);
     vscode.window.showErrorMessage(`Code Atlas: Analysis failed — ${msg}`);
   } finally {
+    refreshInProgress = false;
     panelManager.sendLoading(false);
   }
 }

@@ -117,7 +117,7 @@
       },
       {
         "command": "code-atlas.showFileImporters",
-        "title": "Show Who Imports This",
+        "title": "Show Reverse Dependencies",
         "category": "Code Atlas"
       },
       {
@@ -193,8 +193,7 @@
           "type": "string",
           "enum": [
             "dagre",
-            "cose",
-            "breadthfirst",
+            "dagreLR",
             "grid",
             "circle"
           ],
