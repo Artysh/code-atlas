@@ -28,58 +28,76 @@ export function getWebviewContent(webview: vscode.Webview, extensionUri: vscode.
 
     <!-- ===== TOOLBAR ===== -->
     <header id="toolbar">
-      <div class="toolbar-section">
-        <div class="toolbar-group">
-          <select id="view-selector" title="Select view">
-            <option value="architecture">Architecture Map</option>
-            <option value="dependency">Dependency Graph</option>
-            <option value="callGraph">Call Graph</option>
-            <option value="componentTree">Component Tree</option>
-            <option value="routeMap">Route Map</option>
-            <option value="userFlow">User Flow</option>
-          </select>
+      <div class="toolbar-section toolbar-left">
+        <div class="toolbar-group" id="folder-selector-group">
+          <div class="select-with-icon">
+            <svg class="select-icon" width="14" height="14" viewBox="0 0 16 16"><path d="M1.5 2.5h4l1.5 1.5H14a.5.5 0 0 1 .5.5v8.5a.5.5 0 0 1-.5.5H2a.5.5 0 0 1-.5-.5v-10z" stroke="currentColor" stroke-width="1.2" fill="none"/></svg>
+            <select id="folder-selector" title="Select workspace folder"></select>
+          </div>
         </div>
         <div class="toolbar-divider"></div>
         <div class="toolbar-group">
-          <select id="layout-selector" title="Layout algorithm">
-            <option value="dagre">Top to Bottom</option>
-            <option value="dagreLR">Left to Right</option>
-            <option value="grid">Grid</option>
-            <option value="circle">Circle</option>
-          </select>
+          <div class="select-with-icon">
+            <svg class="select-icon" width="14" height="14" viewBox="0 0 16 16"><path d="M2 4h12M2 8h12M2 12h12" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round"/></svg>
+            <select id="view-selector" title="Select view">
+              <option value="architecture">Architecture Map</option>
+              <option value="dependency">Dependency Graph</option>
+              <option value="callGraph">Call Graph</option>
+              <option value="componentTree">Component Tree</option>
+              <option value="routeMap">Route Map</option>
+              <option value="userFlow">User Flow</option>
+              <option value="k8sMap">Kubernetes Map</option>
+              <option value="argoMap">Argo Map</option>
+            </select>
+          </div>
+        </div>
+        <div class="toolbar-divider"></div>
+        <div class="toolbar-group">
+          <div class="select-with-icon">
+            <svg class="select-icon" width="14" height="14" viewBox="0 0 16 16"><rect x="2" y="2" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.2" fill="none"/><rect x="9" y="2" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.2" fill="none"/><rect x="2" y="9" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.2" fill="none"/><rect x="9" y="9" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1.2" fill="none"/></svg>
+            <select id="layout-selector" title="Layout algorithm">
+              <option value="dagre">Top to Bottom</option>
+              <option value="dagreLR">Left to Right</option>
+              <option value="grid">Grid</option>
+              <option value="circle">Circle</option>
+            </select>
+          </div>
         </div>
       </div>
 
-      <div class="toolbar-section">
+      <div class="toolbar-section toolbar-right">
+        <div class="toolbar-group toolbar-actions">
+          <button id="btn-zoom-in" class="tb" title="Zoom in">
+            <svg width="16" height="16" viewBox="0 0 16 16"><circle cx="7" cy="7" r="5" stroke="currentColor" stroke-width="1.3" fill="none"/><path d="M7 5v4M5 7h4" stroke="currentColor" stroke-width="1.4" fill="none"/><path d="M10.8 10.8L14 14" stroke="currentColor" stroke-width="1.5" fill="none"/></svg>
+          </button>
+          <button id="btn-zoom-out" class="tb" title="Zoom out">
+            <svg width="16" height="16" viewBox="0 0 16 16"><circle cx="7" cy="7" r="5" stroke="currentColor" stroke-width="1.3" fill="none"/><path d="M5 7h4" stroke="currentColor" stroke-width="1.4" fill="none"/><path d="M10.8 10.8L14 14" stroke="currentColor" stroke-width="1.5" fill="none"/></svg>
+          </button>
+          <button id="btn-fit" class="tb" title="Fit to view">
+            <svg width="16" height="16" viewBox="0 0 16 16"><path d="M2 6V2h4M10 2h4v4M14 10v4h-4M6 14H2v-4" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round"/></svg>
+          </button>
+          <button id="btn-refresh" class="tb" title="Refresh">
+            <svg width="16" height="16" viewBox="0 0 16 16"><path d="M13.5 8A5.5 5.5 0 1 1 8 2.5" stroke="currentColor" stroke-width="1.4" fill="none"/><path d="M10 2.5L8 5l3 0z" fill="currentColor"/></svg>
+          </button>
+          <button id="btn-export" class="tb" title="Export">
+            <svg width="16" height="16" viewBox="0 0 16 16"><path d="M8 2v8M4.5 7L8 10.5 11.5 7" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M3 13h10" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+          </button>
+        </div>
         <div class="toolbar-divider"></div>
-        <button id="btn-zoom-in" class="tb" title="Zoom in">
-          <svg width="16" height="16" viewBox="0 0 16 16"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.6" fill="none"/></svg>
-        </button>
-        <button id="btn-zoom-out" class="tb" title="Zoom out">
-          <svg width="16" height="16" viewBox="0 0 16 16"><path d="M3 8h10" stroke="currentColor" stroke-width="1.6" fill="none"/></svg>
-        </button>
-        <button id="btn-fit" class="tb" title="Fit to view">
-          <svg width="16" height="16" viewBox="0 0 16 16"><path d="M2 6V2h4M10 2h4v4M14 10v4h-4M6 14H2v-4" stroke="currentColor" stroke-width="1.4" fill="none"/></svg>
-        </button>
-        <div class="toolbar-divider"></div>
-        <button id="btn-search" class="tb" title="Search (Ctrl+F)">
-          <svg width="16" height="16" viewBox="0 0 16 16"><circle cx="7" cy="7" r="4.5" stroke="currentColor" stroke-width="1.4" fill="none"/><path d="M10.5 10.5L14 14" stroke="currentColor" stroke-width="1.6" fill="none"/></svg>
-        </button>
-        <button id="btn-refresh" class="tb" title="Refresh analysis">
-          <svg width="16" height="16" viewBox="0 0 16 16"><path d="M13.5 8A5.5 5.5 0 1 1 8 2.5" stroke="currentColor" stroke-width="1.4" fill="none"/><path d="M10 2.5L8 5l3 0z" fill="currentColor"/></svg>
-        </button>
-        <button id="btn-export" class="tb" title="Export graph">
-          <svg width="16" height="16" viewBox="0 0 16 16"><path d="M8 2v9M4.5 8L8 11.5 11.5 8M3 14h10" stroke="currentColor" stroke-width="1.4" fill="none"/></svg>
-        </button>
-        <div class="toolbar-divider"></div>
-        <button id="btn-filter" class="tb tb-label" title="Show/hide node types">Filter</button>
-        <button id="btn-toggle-sidebar" class="tb tb-label" title="Toggle insights panel">Insights</button>
-      </div>
-
-      <div class="toolbar-section toolbar-end">
-        <span class="stats" id="node-count">0 nodes</span>
-        <span class="stats-sep">/</span>
-        <span class="stats" id="edge-count">0 edges</span>
+        <div class="toolbar-group toolbar-actions">
+          <button id="btn-search" class="tb tb-icon-label" title="Search (Ctrl+F)">
+            <svg width="14" height="14" viewBox="0 0 16 16"><circle cx="7" cy="7" r="4.5" stroke="currentColor" stroke-width="1.3" fill="none"/><path d="M10.5 10.5L14 14" stroke="currentColor" stroke-width="1.5" fill="none"/></svg>
+            <span>Search</span>
+          </button>
+          <button id="btn-filter" class="tb tb-icon-label" title="Show/hide node types">
+            <svg width="14" height="14" viewBox="0 0 16 16"><path d="M1 3h14L9 9v4l-2 1V9z" stroke="currentColor" stroke-width="1.2" fill="none" stroke-linejoin="round"/></svg>
+            <span>Filter</span>
+          </button>
+          <button id="btn-toggle-sidebar" class="tb tb-icon-label" title="Toggle insights panel">
+            <svg width="14" height="14" viewBox="0 0 16 16"><circle cx="8" cy="5" r="1.5" fill="currentColor"/><path d="M8 8v5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><circle cx="8" cy="8" r="6.5" stroke="currentColor" stroke-width="1.2" fill="none"/></svg>
+            <span>Insights</span>
+          </button>
+        </div>
       </div>
     </header>
 
@@ -87,24 +105,20 @@ export function getWebviewContent(webview: vscode.Webview, extensionUri: vscode.
     <div id="main-content">
       <div id="graph-wrapper">
         <div id="graph-container"></div>
-        <div id="minimap"></div>
-        <!-- Legend -->
-        <div id="legend">
-          <div class="legend-item"><span class="legend-dot" style="background:#5B9BD5"></span>File</div>
-          <div class="legend-item"><span class="legend-dot" style="background:#E5C07B"></span>Class</div>
-          <div class="legend-item"><span class="legend-dot" style="background:#C678DD"></span>Function</div>
-          <div class="legend-item"><span class="legend-dot" style="background:#56B6C2"></span>Component</div>
-          <div class="legend-item"><span class="legend-dot" style="background:#E06C75"></span>Route</div>
-          <div class="legend-item"><span class="legend-dot" style="background:#3D5A80"></span>Module</div>
+
+        <!-- Bottom bar: stats breakdown + dynamic legend -->
+        <div id="bottom-bar">
+          <div id="graph-stats"></div>
+          <div class="bottom-bar-divider" id="stats-legend-divider"></div>
+          <div id="legend"></div>
         </div>
+
+        <!-- Minimap (bottom-right floating) -->
+        <div id="minimap"></div>
       </div>
 
       <!-- ===== SIDEBAR ===== -->
       <aside id="sidebar" class="hidden">
-        <section id="filters-panel">
-          <h3 class="panel-heading">Filters</h3>
-          <div id="filter-checkboxes"></div>
-        </section>
         <section id="file-deps-panel">
           <h3 class="panel-heading">File Dependencies</h3>
           <div id="file-deps-content">

@@ -4,6 +4,7 @@ import * as path from 'path';
 import { Scanner } from './parsers/scanner';
 import { AstParser } from './parsers/astParser';
 import { RouteParser } from './parsers/routeParser';
+import { YamlParser, K8sResource } from './parsers/yamlParser';
 import { GraphBuilder } from './graph/graphBuilder';
 import { Analyzer } from './insights/analyzer';
 import { CacheManager } from './cache/cacheManager';
@@ -14,6 +15,7 @@ import { SidebarProvider } from './sidebar/sidebarProvider';
 let scanner: Scanner;
 let astParser: AstParser;
 let routeParser: RouteParser;
+let yamlParser: YamlParser;
 let graphBuilder: GraphBuilder;
 let analyzer: Analyzer;
 let cacheManager: CacheManager;
@@ -23,14 +25,18 @@ let refreshDebounce: ReturnType<typeof setTimeout> | undefined;
 
 let lastParsedFiles: ParsedFile[] = [];
 let lastRoutes: ParsedRoute[] = [];
+let lastK8sResources: K8sResource[] = [];
 
 let refreshInProgress = false;
+
+let selectedFolder: vscode.WorkspaceFolder | undefined;
 
 export function activate(context: vscode.ExtensionContext): void {
   try {
     scanner = new Scanner();
     astParser = new AstParser();
     routeParser = new RouteParser();
+    yamlParser = new YamlParser();
     graphBuilder = new GraphBuilder();
     analyzer = new Analyzer();
     cacheManager = new CacheManager();
@@ -50,6 +56,8 @@ export function activate(context: vscode.ExtensionContext): void {
       vscode.commands.registerCommand('code-atlas.showComponentTree', () => showGraph('componentTree')),
       vscode.commands.registerCommand('code-atlas.showRouteMap', () => showGraph('routeMap')),
       vscode.commands.registerCommand('code-atlas.showUserFlow', () => showGraph('userFlow')),
+      vscode.commands.registerCommand('code-atlas.showK8sMap', () => showGraph('k8sMap')),
+      vscode.commands.registerCommand('code-atlas.showArgoMap', () => showGraph('argoMap')),
       vscode.commands.registerCommand('code-atlas.refresh', () => refresh()),
       vscode.commands.registerCommand('code-atlas.exportGraph', () => {
         panelManager.show(currentView);
@@ -83,10 +91,23 @@ export function activate(context: vscode.ExtensionContext): void {
       }),
     );
 
+    selectedFolder = vscode.workspace.workspaceFolders?.[0];
+
     panelManager.onDidRequestRefresh(() => refresh());
     panelManager.onDidChangeView((view) => {
       currentView = view;
       refresh();
+    });
+
+    panelManager.onDidChangeWorkspaceFolder((uri) => {
+      const folder = vscode.workspace.workspaceFolders?.find(f => f.uri.toString() === uri);
+      if (folder) {
+        selectedFolder = folder;
+        lastParsedFiles = [];
+        lastRoutes = [];
+        lastK8sResources = [];
+        refresh();
+      }
     });
 
     panelManager.onDidRequestFileDeps(async (filePath) => {
@@ -110,6 +131,21 @@ export function activate(context: vscode.ExtensionContext): void {
       refreshDebounce = setTimeout(() => refresh(), 1000);
     });
 
+    context.subscriptions.push(
+      vscode.workspace.onDidChangeWorkspaceFolders(() => {
+        const folders = vscode.workspace.workspaceFolders;
+        if (folders && folders.length > 0) {
+          if (!selectedFolder || !folders.includes(selectedFolder)) {
+            selectedFolder = folders[0];
+            lastParsedFiles = [];
+            lastRoutes = [];
+            lastK8sResources = [];
+          }
+          sendWorkspaceFolders();
+        }
+      }),
+    );
+
     context.subscriptions.push(cacheManager);
     context.subscriptions.push(panelManager);
 
@@ -121,26 +157,58 @@ export function activate(context: vscode.ExtensionContext): void {
   }
 }
 
+function getWorkspaceRoot(): string | undefined {
+  return selectedFolder?.uri.fsPath;
+}
+
+function selectFolderForFile(filePath: string): void {
+  const folder = vscode.workspace.getWorkspaceFolder(vscode.Uri.file(filePath));
+  if (folder && folder !== selectedFolder) {
+    selectedFolder = folder;
+    lastParsedFiles = [];
+    lastRoutes = [];
+    lastK8sResources = [];
+    sendWorkspaceFolders();
+  }
+}
+
+function sendWorkspaceFolders(): void {
+  const folders = vscode.workspace.workspaceFolders;
+  if (!folders || folders.length === 0) { return; }
+
+  const folderInfos = folders.map(f => ({ name: f.name, uri: f.uri.toString() }));
+  const selected = selectedFolder?.uri.toString() || folderInfos[0].uri;
+  panelManager.sendWorkspaceFolders(folderInfos, selected);
+}
+
 async function showGraph(view: ViewType): Promise<void> {
   currentView = view;
   panelManager.setFileViewActive(false);
   panelManager.show(view);
   await panelManager.waitForReady();
+  sendWorkspaceFolders();
   await refresh();
 }
 
 async function showFileInGraph(filePath: string): Promise<void> {
-  const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+  selectFolderForFile(filePath);
+  const workspaceRoot = getWorkspaceRoot();
   if (!workspaceRoot) { return; }
 
   await ensureParsedData();
 
-  const viewToUse = currentView === 'architecture' ? 'architecture' : currentView;
+  let viewToUse: ViewType;
+  if (isYamlFile(filePath)) {
+    viewToUse = 'k8sMap';
+  } else {
+    viewToUse = currentView === 'architecture' ? 'architecture' : currentView;
+  }
+
   panelManager.setFileViewActive(false);
   panelManager.show(viewToUse);
   await panelManager.waitForReady();
 
-  if (lastParsedFiles.length > 0) {
+  if (lastParsedFiles.length > 0 || lastK8sResources.length > 0) {
     const { nodes, edges } = graphBuilder.build(lastParsedFiles, lastRoutes, viewToUse, workspaceRoot);
     const insights = analyzer.analyze(lastParsedFiles, workspaceRoot);
     panelManager.sendGraph(nodes, edges);
@@ -151,26 +219,35 @@ async function showFileInGraph(filePath: string): Promise<void> {
 }
 
 async function showFileGraph(filePath: string): Promise<void> {
-  const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+  selectFolderForFile(filePath);
+  const workspaceRoot = getWorkspaceRoot();
   if (!workspaceRoot) { return; }
 
   await ensureParsedData();
 
   panelManager.setFileViewActive(true);
-  panelManager.show('dependency');
+  const viewToShow = isYamlFile(filePath) ? 'k8sMap' : 'dependency';
+  panelManager.show(viewToShow as ViewType);
   await panelManager.waitForReady();
   panelManager.sendLoading(true);
 
   try {
-    const { nodes, edges } = graphBuilder.buildFileGraph(lastParsedFiles, filePath, workspaceRoot);
+    let nodes, edges;
+    if (isYamlFile(filePath)) {
+      ({ nodes, edges } = graphBuilder.buildK8sFileGraph(lastK8sResources, filePath, workspaceRoot));
+    } else {
+      ({ nodes, edges } = graphBuilder.buildFileGraph(lastParsedFiles, filePath, workspaceRoot));
+    }
     if (nodes.length === 0) {
       vscode.window.showInformationMessage(`Code Atlas: No connections found for ${path.basename(filePath)}`);
     }
     panelManager.sendGraph(nodes, edges);
     panelManager.focusFile(filePath);
 
-    const deps = computeFileDeps(filePath);
-    if (deps) { panelManager.sendFileDeps(deps); }
+    if (!isYamlFile(filePath)) {
+      const deps = computeFileDeps(filePath);
+      if (deps) { panelManager.sendFileDeps(deps); }
+    }
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);
     vscode.window.showErrorMessage(`Code Atlas: ${msg}`);
@@ -180,7 +257,8 @@ async function showFileGraph(filePath: string): Promise<void> {
 }
 
 async function showFileCalls(filePath: string): Promise<void> {
-  const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+  selectFolderForFile(filePath);
+  const workspaceRoot = getWorkspaceRoot();
   if (!workspaceRoot) { return; }
 
   await ensureParsedData();
@@ -208,7 +286,8 @@ async function showFileCalls(filePath: string): Promise<void> {
 }
 
 async function showFileImporters(filePath: string): Promise<void> {
-  const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+  selectFolderForFile(filePath);
+  const workspaceRoot = getWorkspaceRoot();
   if (!workspaceRoot) { return; }
 
   await ensureParsedData();
@@ -236,30 +315,44 @@ async function showFileImporters(filePath: string): Promise<void> {
   }
 }
 
+function isYamlFile(filePath: string): boolean {
+  return filePath.endsWith('.yaml') || filePath.endsWith('.yml');
+}
+
 async function ensureParsedData(): Promise<void> {
   if (lastParsedFiles.length > 0) { return; }
 
-  const filePaths = await scanner.scan();
+  const filePaths = await scanner.scan(selectedFolder);
   lastParsedFiles = [];
   lastRoutes = [];
+  lastK8sResources = [];
 
   for (const filePath of filePaths) {
     const content = fs.readFileSync(filePath, 'utf-8');
 
-    let parsed = cacheManager.get(filePath);
-    if (!parsed) {
-      parsed = astParser.parseFile(filePath, content);
-      cacheManager.set(filePath, parsed);
-    }
-    lastParsedFiles.push(parsed);
+    if (isYamlFile(filePath)) {
+      const resources = yamlParser.extractResources(filePath, content);
+      lastK8sResources.push(...resources);
+      const parsed = yamlParser.parseFile(filePath, content);
+      lastParsedFiles.push(parsed);
+    } else {
+      let parsed = cacheManager.get(filePath);
+      if (!parsed) {
+        parsed = astParser.parseFile(filePath, content);
+        cacheManager.set(filePath, parsed);
+      }
+      lastParsedFiles.push(parsed);
 
-    const routes = routeParser.parseFile(filePath, content);
-    lastRoutes.push(...routes);
+      const routes = routeParser.parseFile(filePath, content);
+      lastRoutes.push(...routes);
+    }
   }
+
+  graphBuilder.setK8sResources(lastK8sResources);
 }
 
 function computeFileDeps(targetPath: string): FileDeps | null {
-  const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+  const workspaceRoot = getWorkspaceRoot();
   if (!workspaceRoot || lastParsedFiles.length === 0) { return null; }
 
   const targetFile = lastParsedFiles.find(f => f.filePath === targetPath);
@@ -296,8 +389,9 @@ function computeFileDeps(targetPath: string): FileDeps | null {
     }
   }
 
+  const validSymbolTypes: Set<string> = new Set(['function', 'class', 'component', 'k8sResource', 'argoResource']);
   const symbols: FileDeps['symbols'] = targetFile.symbols
-    .filter(s => s.type === 'function' || s.type === 'class' || s.type === 'component')
+    .filter(s => validSymbolTypes.has(s.type))
     .map(s => ({
       name: s.name,
       type: s.type,
@@ -315,7 +409,7 @@ function computeFileDeps(targetPath: string): FileDeps | null {
 
 function resolveImportForDeps(fromDir: string, importPath: string, parsedFiles: ParsedFile[]): string | null {
   const resolved = path.resolve(fromDir, importPath);
-  const extensions = ['.ts', '.tsx', '.js', '.jsx'];
+  const extensions = ['.ts', '.tsx', '.js', '.jsx', '.yaml', '.yml'];
   const knownPaths = new Set(parsedFiles.map(f => f.filePath));
 
   if (knownPaths.has(resolved)) { return resolved; }
@@ -333,7 +427,7 @@ async function refresh(): Promise<void> {
   if (refreshInProgress) { return; }
   if (panelManager.isFileViewActive) { return; }
 
-  const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+  const workspaceRoot = getWorkspaceRoot();
   if (!workspaceRoot) {
     vscode.window.showWarningMessage('Code Atlas: No workspace folder open.');
     return;
@@ -343,9 +437,10 @@ async function refresh(): Promise<void> {
   panelManager.sendLoading(true);
 
   try {
-    const filePaths = await scanner.scan();
+    const filePaths = await scanner.scan(selectedFolder);
     lastParsedFiles = [];
     lastRoutes = [];
+    lastK8sResources = [];
 
     await vscode.window.withProgress(
       {
@@ -358,15 +453,22 @@ async function refresh(): Promise<void> {
           const filePath = filePaths[i];
           const content = fs.readFileSync(filePath, 'utf-8');
 
-          let parsed = cacheManager.get(filePath);
-          if (!parsed) {
-            parsed = astParser.parseFile(filePath, content);
-            cacheManager.set(filePath, parsed);
-          }
-          lastParsedFiles.push(parsed);
+          if (isYamlFile(filePath)) {
+            const resources = yamlParser.extractResources(filePath, content);
+            lastK8sResources.push(...resources);
+            const parsed = yamlParser.parseFile(filePath, content);
+            lastParsedFiles.push(parsed);
+          } else {
+            let parsed = cacheManager.get(filePath);
+            if (!parsed) {
+              parsed = astParser.parseFile(filePath, content);
+              cacheManager.set(filePath, parsed);
+            }
+            lastParsedFiles.push(parsed);
 
-          const routes = routeParser.parseFile(filePath, content);
-          lastRoutes.push(...routes);
+            const routes = routeParser.parseFile(filePath, content);
+            lastRoutes.push(...routes);
+          }
 
           if (i % 50 === 0) {
             progress.report({
@@ -378,6 +480,7 @@ async function refresh(): Promise<void> {
       },
     );
 
+    graphBuilder.setK8sResources(lastK8sResources);
     const { nodes, edges } = graphBuilder.build(lastParsedFiles, lastRoutes, currentView, workspaceRoot);
     const insights = analyzer.analyze(lastParsedFiles, workspaceRoot);
 

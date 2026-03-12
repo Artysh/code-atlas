@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 
 export class Scanner {
-  async scan(): Promise<string[]> {
+  async scan(folder?: vscode.WorkspaceFolder): Promise<string[]> {
     const config = vscode.workspace.getConfiguration('codeAtlas');
     const includePatterns = config.get<string[]>('include', [
       '**/*.ts', '**/*.tsx', '**/*.js', '**/*.jsx',
@@ -15,6 +15,15 @@ export class Scanner {
     const excludeGlob = `{${excludePatterns.join(',')}}`;
 
     const uris = await vscode.workspace.findFiles(includeGlob, excludeGlob, maxFiles);
+
+    if (folder) {
+      const folderPath = folder.uri.fsPath;
+      return uris
+        .filter(uri => uri.fsPath.startsWith(folderPath))
+        .map(uri => uri.fsPath)
+        .sort();
+    }
+
     return uris.map(uri => uri.fsPath).sort();
   }
 }

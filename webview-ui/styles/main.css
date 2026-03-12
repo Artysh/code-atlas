@@ -44,8 +44,8 @@ html, body {
   height: 100%;
   background-color: var(--vscode-editor-background, #1e1e1e);
   background-image:
-    radial-gradient(circle, rgba(255,255,255,0.06) 1px, transparent 1px);
-  background-size: 32px 32px;
+    radial-gradient(circle, rgba(255,255,255,0.04) 1px, transparent 1px);
+  background-size: 24px 24px;
 }
 
 /* ================================================================
@@ -54,9 +54,10 @@ html, body {
 #toolbar {
   display: flex;
   align-items: center;
-  gap: 4px;
-  padding: 6px 12px;
-  min-height: 44px;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 5px 10px;
+  min-height: 40px;
   border-bottom: 1px solid var(--vscode-panel-border, #333);
   background: var(--vscode-editor-background, #1e1e1e);
   flex-shrink: 0;
@@ -69,60 +70,92 @@ html, body {
   gap: 4px;
   flex-shrink: 0;
 }
-
-.toolbar-end {
-  margin-left: auto;
+.toolbar-left {
   flex-shrink: 1;
   min-width: 0;
+  overflow: hidden;
+}
+.toolbar-right {
+  flex-shrink: 1;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .toolbar-group {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 2px;
+}
+
+.toolbar-actions {
+  gap: 1px;
 }
 
 .toolbar-divider {
   width: 1px;
-  height: 22px;
+  height: 20px;
   background: var(--vscode-panel-border, #444);
-  margin: 0 6px;
+  margin: 0 4px;
   flex-shrink: 0;
+  opacity: 0.6;
 }
 
-/* Toolbar button */
+/* --- Select with icon --- */
+.select-with-icon {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.select-with-icon .select-icon {
+  position: absolute;
+  left: 8px;
+  pointer-events: none;
+  color: var(--vscode-descriptionForeground, #888);
+  z-index: 1;
+  flex-shrink: 0;
+}
+.select-with-icon select {
+  padding-left: 28px;
+}
+
+/* --- Toolbar button base --- */
 .tb {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
+  width: 30px;
+  height: 30px;
   background: transparent;
-  color: var(--vscode-foreground, #ccc);
+  color: var(--vscode-descriptionForeground, #999);
   border: 1px solid transparent;
-  border-radius: 4px;
+  border-radius: 5px;
   cursor: pointer;
   flex-shrink: 0;
-  transition: background 0.2s ease, transform 0.15s ease, border-color 0.2s ease;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
 }
 .tb:hover {
   background: var(--vscode-toolbar-hoverBackground, rgba(255,255,255,0.08));
-  transform: scale(1.05);
+  color: var(--vscode-foreground, #e0e0e0);
 }
 .tb:active {
   background: var(--vscode-toolbar-activeBackground, rgba(255,255,255,0.12));
-  transform: scale(0.95);
 }
 .tb svg {
   pointer-events: none;
+  flex-shrink: 0;
 }
 
-.tb.tb-label {
+/* Icon + label button */
+.tb.tb-icon-label {
   width: auto;
-  padding: 0 12px;
-  font-size: 12px;
-  font-weight: 500;
+  padding: 0 10px;
   gap: 5px;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.2px;
+}
+.tb.tb-icon-label span {
+  white-space: nowrap;
 }
 
 .tb.small {
@@ -132,22 +165,24 @@ html, body {
   line-height: 1;
 }
 
-/* Selects */
+/* --- Selects --- */
 select {
-  height: 30px;
-  padding: 0 24px 0 10px;
+  height: 28px;
+  padding: 0 22px 0 10px;
   background: var(--vscode-dropdown-background, #3c3c3c);
   color: var(--vscode-dropdown-foreground, #ccc);
   border: 1px solid var(--vscode-dropdown-border, #555);
-  border-radius: 4px;
-  font-size: 12px;
+  border-radius: 5px;
+  font-size: 11px;
   cursor: pointer;
   outline: none;
   appearance: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23999'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='5'%3E%3Cpath d='M0 0l4 5 4-5z' fill='%23888'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
-  background-position: right 8px center;
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  background-position: right 7px center;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  max-width: 200px;
+  text-overflow: ellipsis;
 }
 select:focus {
   border-color: var(--vscode-focusBorder, #007fd4);
@@ -157,47 +192,78 @@ select:hover {
   border-color: var(--vscode-dropdown-border, #777);
 }
 
-/* Stats */
+/* ================================================================
+   BOTTOM BAR (Stats + Legend combined)
+   ================================================================ */
+#bottom-bar {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  gap: 0;
+  padding: 5px 14px;
+  background: linear-gradient(to top, rgba(20, 20, 22, 0.95) 0%, rgba(20, 20, 22, 0.85) 100%);
+  border-top: 1px solid rgba(255,255,255,0.06);
+  z-index: 10;
+  flex-wrap: wrap;
+  row-gap: 3px;
+  overflow: hidden;
+  max-height: 52px;
+}
+
+.bottom-bar-divider {
+  width: 1px;
+  height: 14px;
+  background: rgba(255,255,255,0.12);
+  margin: 0 10px;
+  flex-shrink: 0;
+}
+
+#graph-stats {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  row-gap: 2px;
+}
+
 .stats {
-  font-size: 11px;
+  font-size: 10px;
+  font-weight: 500;
   color: var(--vscode-descriptionForeground, #888);
   white-space: nowrap;
 }
 .stats-sep {
-  font-size: 11px;
-  color: var(--vscode-descriptionForeground, #555);
-  margin: 0 3px;
+  font-size: 10px;
+  color: rgba(255,255,255,0.15);
+  margin: 0 4px;
 }
 
-/* ================================================================
-   LEGEND (bottom-right of graph)
-   ================================================================ */
 #legend {
-  position: absolute;
-  bottom: 14px;
-  left: 248px;
   display: flex;
-  flex-wrap: wrap;
+  align-items: center;
   gap: 10px;
-  padding: 7px 14px;
-  background: rgba(30, 30, 30, 0.88);
-  border: 1px solid var(--vscode-panel-border, #444);
-  border-radius: 6px;
-  z-index: 10;
-  font-size: 11px;
-  color: var(--vscode-descriptionForeground, #aaa);
-  max-width: calc(100% - 270px);
+  flex-wrap: wrap;
+  row-gap: 2px;
+  flex-shrink: 1;
+  min-width: 0;
 }
 .legend-item {
   display: flex;
   align-items: center;
-  gap: 5px;
+  gap: 4px;
   white-space: nowrap;
+  font-size: 10px;
+  color: var(--vscode-descriptionForeground, #999);
+  letter-spacing: 0.2px;
 }
 .legend-dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 3px;
+  width: 7px;
+  height: 7px;
+  border-radius: 2px;
   flex-shrink: 0;
 }
 
@@ -206,22 +272,24 @@ select:hover {
    ================================================================ */
 #minimap {
   position: absolute;
-  bottom: 50px;
-  left: 14px;
-  width: 220px;
-  height: 150px;
+  bottom: 44px;
+  right: 14px;
+  width: 180px;
+  height: 120px;
   border: 1px solid var(--vscode-panel-border, #444);
-  border-radius: 6px;
+  border-radius: 8px;
   background: rgba(20, 20, 22, 0.92);
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
   z-index: 10;
   overflow: hidden;
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, opacity 0.2s ease;
+  opacity: 0.7;
 }
 #minimap:hover {
+  opacity: 1;
   border-color: var(--vscode-focusBorder, #007fd4);
-  box-shadow: 0 0 12px rgba(14, 99, 156, 0.2);
+  box-shadow: 0 0 16px rgba(14, 99, 156, 0.15);
 }
 #minimap canvas {
   width: 100%;
@@ -292,15 +360,19 @@ select:hover {
   border-radius: 3px;
   flex-shrink: 0;
 }
-.filter-dot-file      { background: #5B9BD5; }
-.filter-dot-class     { background: #E5C07B; }
-.filter-dot-function  { background: #C678DD; }
-.filter-dot-component { background: #56B6C2; }
-.filter-dot-route     { background: #E06C75; }
-.filter-dot-module    { background: #3D5A80; }
-.filter-dot-interface { background: #98C379; }
-.filter-dot-enum      { background: #D19A66; }
-.filter-dot-variable  { background: #61AFEF; }
+.filter-dot-file         { background: #5B9BD5; }
+.filter-dot-class        { background: #E5C07B; }
+.filter-dot-function     { background: #C678DD; }
+.filter-dot-component    { background: #56B6C2; }
+.filter-dot-route        { background: #E06C75; }
+.filter-dot-module       { background: #3D5A80; }
+.filter-dot-interface    { background: #98C379; }
+.filter-dot-enum         { background: #D19A66; }
+.filter-dot-variable     { background: #61AFEF; }
+.filter-dot-k8sResource  { background: #326CE5; }
+.filter-dot-argoResource { background: #EF7B4D; }
+.filter-dot-helmChart    { background: #0F1689; }
+.filter-dot-namespace    { background: #6B7280; }
 
 /* --- File Dependencies --- */
 #file-deps-panel {
@@ -553,14 +625,14 @@ select:hover {
 }
 #loading.hidden { display: none; }
 .spinner {
-  width: 40px; height: 40px;
-  border: 3px solid rgba(255, 255, 255, 0.08);
+  width: 36px; height: 36px;
+  border: 2.5px solid rgba(255, 255, 255, 0.08);
   border-top-color: var(--vscode-progressBar-background, #0e70c0);
   border-right-color: var(--vscode-progressBar-background, #0e70c0);
   border-radius: 50%;
   animation: spin 0.7s cubic-bezier(0.4, 0, 0.2, 1) infinite;
 }
-.loading-text { font-size: 14px; color: var(--vscode-foreground, #ccc); }
+.loading-text { font-size: 13px; color: var(--vscode-descriptionForeground, #aaa); }
 @keyframes spin { to { transform: rotate(360deg); } }
 
 /* ================================================================
@@ -585,12 +657,8 @@ select:hover {
   animation: tooltipFadeIn 0.12s ease-out;
   overscroll-behavior: contain;
 }
-#tooltip::-webkit-scrollbar {
-  width: 5px;
-}
-#tooltip::-webkit-scrollbar-track {
-  background: transparent;
-}
+#tooltip::-webkit-scrollbar { width: 5px; }
+#tooltip::-webkit-scrollbar-track { background: transparent; }
 #tooltip::-webkit-scrollbar-thumb {
   background: rgba(255, 255, 255, 0.15);
   border-radius: 3px;
@@ -705,7 +773,6 @@ select:hover {
   font-style: italic;
 }
 
-/* bottom padding for last child */
 #tooltip > :last-child { padding-bottom: 8px; }
 
 /* ================================================================
@@ -720,9 +787,10 @@ select:hover {
   z-index: 400;
   min-width: 200px;
   max-width: 280px;
+  max-height: 70vh;
+  overflow-y: auto;
   box-shadow: 0 8px 28px rgba(0, 0, 0, 0.6);
   animation: menuFadeIn 0.15s ease-out;
-  overflow: hidden;
 }
 #filter-popup.hidden { display: none; }
 
@@ -870,10 +938,15 @@ select:hover {
 .hidden { display: none !important; }
 
 /* Light theme adjustments */
-body.vscode-light #minimap,
-body.vscode-light #legend { background: rgba(255, 255, 255, 0.92); }
+body.vscode-light #minimap { background: rgba(255, 255, 255, 0.92); }
+body.vscode-light #bottom-bar {
+  background: linear-gradient(to top, rgba(255, 255, 255, 0.95) 0%, rgba(255, 255, 255, 0.85) 100%);
+  border-top-color: rgba(0,0,0,0.08);
+}
+body.vscode-light .bottom-bar-divider { background: rgba(0,0,0,0.12); }
 body.vscode-light #loading { background: rgba(255, 255, 255, 0.9); }
 body.vscode-light #graph-container {
-  background-image: radial-gradient(circle, rgba(0,0,0,0.07) 1px, transparent 1px);
-  background-size: 32px 32px;
+  background-image: radial-gradient(circle, rgba(0,0,0,0.06) 1px, transparent 1px);
+  background-size: 24px 24px;
 }
+body.vscode-light .stats-sep { color: rgba(0,0,0,0.2); }

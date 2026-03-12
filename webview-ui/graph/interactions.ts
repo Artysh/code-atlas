@@ -11,6 +11,7 @@ type MenuItem = { label: string; icon: string; action: () => void } | 'divider';
 const NODE_COLORS: Record<string, string> = {
   file: '#5B9BD5', class: '#E5C07B', function: '#C678DD', component: '#56B6C2',
   route: '#E06C75', module: '#3D5A80', interface: '#98C379', enum: '#D19A66', variable: '#61AFEF',
+  k8sResource: '#326CE5', argoResource: '#EF7B4D', helmChart: '#0F1689', namespace: '#6B7280',
 };
 
 function escapeHtml(str: string): string {
@@ -25,11 +26,26 @@ function buildNodeTooltipHtml(node: cytoscape.NodeSingular, cy: cytoscape.Core):
   const isParent = node.isParent();
   const color = NODE_COLORS[type] || '#888';
 
+  const k8sKind = node.data('k8sKind');
+  const k8sNamespace = node.data('k8sNamespace');
+  const isPhantom = node.data('isPhantom');
+
   let html = '';
   html += `<div class="tt-header">`;
-  html += `<span class="tt-badge" style="background:${color}">${type}</span>`;
+  if (k8sKind) {
+    html += `<span class="tt-badge" style="background:${color}">${k8sKind}</span>`;
+  } else {
+    html += `<span class="tt-badge" style="background:${color}">${type}</span>`;
+  }
   html += `<strong class="tt-name">${escapeHtml(label)}</strong>`;
+  if (isPhantom) {
+    html += `<span class="tt-badge" style="background:#6B7280;margin-left:4px;font-size:9px">unresolved</span>`;
+  }
   html += `</div>`;
+
+  if (k8sNamespace) {
+    html += `<div class="tooltip-path">namespace: ${escapeHtml(k8sNamespace)}</div>`;
+  }
 
   if (filePath) {
     html += `<div class="tooltip-path">${escapeHtml(filePath)}`;

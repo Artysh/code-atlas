@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { ToWebviewMessage, ToExtensionMessage, ViewType, CyNodeData, CyEdgeData, Insight, FileDeps } from '../types';
+import { ToWebviewMessage, ToExtensionMessage, ViewType, CyNodeData, CyEdgeData, Insight, FileDeps, WorkspaceFolderInfo } from '../types';
 import { getWebviewContent } from './contentProvider';
 
 export class PanelManager implements vscode.Disposable {
@@ -21,11 +21,13 @@ export class PanelManager implements vscode.Disposable {
   private readonly _onDidRequestFileDeps = new vscode.EventEmitter<string>();
   private readonly _onDidRequestFileCalls = new vscode.EventEmitter<string>();
   private readonly _onDidRequestFileImporters = new vscode.EventEmitter<string>();
+  private readonly _onDidChangeWorkspaceFolder = new vscode.EventEmitter<string>();
   readonly onDidRequestRefresh = this._onDidRequestRefresh.event;
   readonly onDidChangeView = this._onDidChangeView.event;
   readonly onDidRequestFileDeps = this._onDidRequestFileDeps.event;
   readonly onDidRequestFileCalls = this._onDidRequestFileCalls.event;
   readonly onDidRequestFileImporters = this._onDidRequestFileImporters.event;
+  readonly onDidChangeWorkspaceFolder = this._onDidChangeWorkspaceFolder.event;
 
   constructor(private context: vscode.ExtensionContext) {
     this.extensionUri = context.extensionUri;
@@ -102,6 +104,10 @@ export class PanelManager implements vscode.Disposable {
 
   sendFileDeps(deps: FileDeps): void {
     this.postMessage({ command: 'setFileDeps', data: deps });
+  }
+
+  sendWorkspaceFolders(folders: WorkspaceFolderInfo[], selected: string): void {
+    this.postMessage({ command: 'setWorkspaceFolders', folders, selected });
   }
 
   waitForReady(): Promise<void> {
@@ -210,6 +216,11 @@ export class PanelManager implements vscode.Disposable {
         break;
       }
 
+      case 'changeWorkspaceFolder':
+        this._fileViewActive = false;
+        this._onDidChangeWorkspaceFolder.fire(message.uri);
+        break;
+
       case 'ready':
         this._webviewReady = true;
         this.flushMessageQueue();
@@ -226,5 +237,6 @@ export class PanelManager implements vscode.Disposable {
     this._onDidRequestFileDeps.dispose();
     this._onDidRequestFileCalls.dispose();
     this._onDidRequestFileImporters.dispose();
+    this._onDidChangeWorkspaceFolder.dispose();
   }
 }

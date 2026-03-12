@@ -9,6 +9,8 @@ interface SidebarEntry {
 
 const QUICK_ACTIONS: SidebarEntry[] = [
   { label: 'Open Architecture Map', command: 'code-atlas.showGraph', icon: 'type-hierarchy', description: 'Full overview' },
+  { label: 'Kubernetes Map', command: 'code-atlas.showK8sMap', icon: 'server-environment', description: 'K8s resources' },
+  { label: 'Argo Map', command: 'code-atlas.showArgoMap', icon: 'rocket', description: 'Argo CD / Workflows' },
   { label: 'Refresh Analysis', command: 'code-atlas.refresh', icon: 'refresh', description: 'Re-scan workspace' },
   { label: 'Export Graph', command: 'code-atlas.exportGraph', icon: 'export', description: 'PNG / SVG / JSON' },
 ];

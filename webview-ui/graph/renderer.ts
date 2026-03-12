@@ -5,35 +5,54 @@ import type { CyNodeData, CyEdgeData, LayoutType } from '../../src/types';
 cytoscape.use(cytoscapeDagre);
 
 const NODE_COLORS: Record<string, string> = {
-  file:      '#5B9BD5',
-  class:     '#E5C07B',
-  function:  '#C678DD',
-  component: '#56B6C2',
-  route:     '#E06C75',
-  module:    '#3D5A80',
-  interface: '#98C379',
-  enum:      '#D19A66',
-  variable:  '#61AFEF',
+  file:         '#5B9BD5',
+  class:        '#E5C07B',
+  function:     '#C678DD',
+  component:    '#56B6C2',
+  route:        '#E06C75',
+  module:       '#3D5A80',
+  interface:    '#98C379',
+  enum:         '#D19A66',
+  variable:     '#61AFEF',
+  k8sResource:  '#326CE5',
+  argoResource: '#EF7B4D',
+  helmChart:    '#0F1689',
+  namespace:    '#6B7280',
 };
 
 const NODE_BORDER_COLORS: Record<string, string> = {
-  file:      '#4A88BF',
-  class:     '#C9A84E',
-  function:  '#A85DB5',
-  component: '#44A0AB',
-  route:     '#C45660',
-  module:    '#2E4A6B',
-  interface: '#7DAF60',
-  enum:      '#B87F4F',
-  variable:  '#4E96D4',
+  file:         '#4A88BF',
+  class:        '#C9A84E',
+  function:     '#A85DB5',
+  component:    '#44A0AB',
+  route:        '#C45660',
+  module:       '#2E4A6B',
+  interface:    '#7DAF60',
+  enum:         '#B87F4F',
+  variable:     '#4E96D4',
+  k8sResource:  '#2557B8',
+  argoResource: '#D4683E',
+  helmChart:    '#0D1270',
+  namespace:    '#565D66',
 };
 
 const EDGE_GRADIENT_COLORS: Record<string, [string, string]> = {
-  import:  ['#5C6370', '#8B95A5'],
-  call:    ['#61AFEF', '#A0D4FF'],
-  render:  ['#56B6C2', '#8CE0E8'],
-  extends: ['#E5C07B', '#F0DCA0'],
-  route:   ['#E06C75', '#F0A0A8'],
+  import:     ['#5C6370', '#8B95A5'],
+  call:       ['#61AFEF', '#A0D4FF'],
+  render:     ['#56B6C2', '#8CE0E8'],
+  extends:    ['#E5C07B', '#F0DCA0'],
+  route:      ['#E06C75', '#F0A0A8'],
+  deploys:    ['#326CE5', '#6B9BF0'],
+  exposes:    ['#98C379', '#B8D9A0'],
+  configures: ['#D19A66', '#E8BA90'],
+  mounts:     ['#C678DD', '#D9A0EE'],
+  selects:    ['#56B6C2', '#8CE0E8'],
+  targets:    ['#E06C75', '#F0A0A8'],
+  contains:   ['#6B7280', '#9CA3AF'],
+  syncs:      ['#EF7B4D', '#F5A080'],
+  triggers:   ['#E5C07B', '#F0DCA0'],
+  depends:    ['#61AFEF', '#A0D4FF'],
+  references: ['#5C6370', '#8B95A5'],
 };
 
 export class GraphRenderer {
@@ -234,6 +253,21 @@ export class GraphRenderer {
     });
   }
 
+  centerOnNode(nodeId: string): void {
+    const node = this.cy.getElementById(nodeId);
+    if (node.length === 0) { return; }
+
+    this.clearHighlight();
+    node.addClass('focused');
+
+    this.cy.animate({
+      center: { eles: node },
+      zoom: Math.max(this.cy.zoom(), 1.2),
+      duration: 500,
+      easing: 'ease-in-out-cubic',
+    });
+  }
+
   tracePath(sourceId: string, targetId: string): void {
     const source = this.cy.getElementById(sourceId);
     const target = this.cy.getElementById(targetId);
@@ -286,24 +320,52 @@ export class GraphRenderer {
     return Array.from(types).sort();
   }
 
+  filterGroups(visibleGroups: Set<string>): void {
+    const groupNodeIds: string[] = [];
+    this.cy.nodes().forEach(node => {
+      if (node.isParent() || this._detachedChildren.has(node.id())) {
+        groupNodeIds.push(node.id());
+      }
+    });
+
+    this.cy.batch(() => {
+      for (const nodeId of groupNodeIds) {
+        if (this._manuallyHidden.has(nodeId)) { continue; }
+        const node = this.cy.getElementById(nodeId);
+        const type = node.data('type');
+        if (visibleGroups.has(type)) {
+          this._reattachChildren(nodeId);
+          node.style('display', 'element');
+        } else {
+          if (node.isParent()) {
+            this._detachChildren(node as cytoscape.NodeSingular);
+          }
+          node.style('display', 'none');
+        }
+      }
+      this._reconcileEdges();
+    });
+  }
+
   filterByType(visibleTypes: Set<string>): void {
     this.cy.batch(() => {
       this.cy.nodes().forEach(node => {
         if (this._manuallyHidden.has(node.id())) { return; }
-        if (node.isChild()) { return; }
+        if (node.isParent() || this._detachedChildren.has(node.id())) { return; }
         const type = node.data('type');
-        if (visibleTypes.has(type)) {
-          this._reattachChildren(node.id());
-          node.style('display', 'element');
-        } else {
-          if (node.isParent()) {
-            this._detachChildren(node);
-          }
-          node.style('display', 'none');
-        }
+        if (!type) { return; }
+        node.style('display', visibleTypes.has(type) ? 'element' : 'none');
       });
+      this._reconcileEdges();
     });
-    setTimeout(() => this.fitToContent(), 100);
+  }
+
+  private _reconcileEdges(): void {
+    this.cy.edges().forEach(edge => {
+      const srcVisible = edge.source().style('display') !== 'none';
+      const tgtVisible = edge.target().style('display') !== 'none';
+      edge.style('display', (srcVisible && tgtVisible) ? 'element' : 'none');
+    });
   }
 
   private _detachChildren(parentNode: cytoscape.NodeSingular): void {
@@ -333,12 +395,13 @@ export class GraphRenderer {
     const node = this.cy.getElementById(nodeId);
     if (node.length === 0) { return; }
     this._manuallyHidden.add(nodeId);
-    if (node.isParent()) {
-      this._detachChildren(node);
-    }
-    node.style('display', 'none');
-    node.connectedEdges().style('display', 'none');
-    setTimeout(() => this.fitToContent(), 100);
+    this.cy.batch(() => {
+      if (node.isParent()) {
+        this._detachChildren(node);
+      }
+      node.style('display', 'none');
+      this._reconcileEdges();
+    });
   }
 
   showAllHidden(): void {
@@ -348,12 +411,11 @@ export class GraphRenderer {
         const node = this.cy.getElementById(id);
         if (node.length > 0) {
           node.style('display', 'element');
-          node.connectedEdges().style('display', 'element');
         }
       }
+      this._manuallyHidden.clear();
+      this._reconcileEdges();
     });
-    this._manuallyHidden.clear();
-    setTimeout(() => this.fitToContent(), 100);
   }
 
   getHiddenCount(): number {
@@ -563,6 +625,85 @@ export class GraphRenderer {
           'width': 2,
           'line-style': 'solid',
         } as unknown as cytoscape.Css.Edge,
+      },
+
+      /* ---- K8s / Argo edge styles ---- */
+      {
+        selector: 'edge[type = "deploys"], edge[type = "syncs"]',
+        style: {
+          'line-color': '#326CE5',
+          'target-arrow-color': '#326CE5',
+          'target-arrow-shape': 'triangle',
+          'width': 2,
+        } as unknown as cytoscape.Css.Edge,
+      },
+      {
+        selector: 'edge[type = "exposes"], edge[type = "selects"]',
+        style: {
+          'line-color': '#98C379',
+          'target-arrow-color': '#98C379',
+          'target-arrow-shape': 'vee',
+          'width': 1.5,
+          'line-style': 'dashed',
+          'line-dash-pattern': [6, 3],
+        } as unknown as cytoscape.Css.Edge,
+      },
+      {
+        selector: 'edge[type = "configures"], edge[type = "mounts"]',
+        style: {
+          'line-color': '#D19A66',
+          'target-arrow-color': '#D19A66',
+          'target-arrow-shape': 'vee',
+          'line-style': 'dashed',
+          'line-dash-pattern': [4, 4],
+        } as unknown as cytoscape.Css.Edge,
+      },
+      {
+        selector: 'edge[type = "triggers"]',
+        style: {
+          'line-color': '#EF7B4D',
+          'target-arrow-color': '#EF7B4D',
+          'target-arrow-shape': 'triangle',
+          'width': 2,
+        } as unknown as cytoscape.Css.Edge,
+      },
+      {
+        selector: 'edge[type = "targets"], edge[type = "depends"]',
+        style: {
+          'line-color': '#61AFEF',
+          'target-arrow-color': '#61AFEF',
+          'line-style': 'dashed',
+          'line-dash-pattern': [8, 4],
+        } as unknown as cytoscape.Css.Edge,
+      },
+      {
+        selector: 'edge[type = "contains"]',
+        style: {
+          'line-color': '#6B7280',
+          'target-arrow-color': '#6B7280',
+          'target-arrow-shape': 'circle',
+          'width': 1,
+          'opacity': 0.4,
+        } as unknown as cytoscape.Css.Edge,
+      },
+      {
+        selector: 'edge[type = "references"]',
+        style: {
+          'line-color': '#5C6370',
+          'target-arrow-color': '#5C6370',
+          'line-style': 'dotted',
+          'width': 1,
+        } as unknown as cytoscape.Css.Edge,
+      },
+
+      /* ---- Phantom / unresolved K8s nodes ---- */
+      {
+        selector: 'node[?isPhantom]',
+        style: {
+          'border-style': 'dashed',
+          'border-width': 2,
+          'background-opacity': 0.5,
+        } as unknown as cytoscape.Css.Node,
       },
 
       /* ---- Edge hover ---- */

@@ -1,8 +1,16 @@
-export type NodeType = 'file' | 'class' | 'function' | 'component' | 'route' | 'module' | 'interface' | 'enum' | 'variable';
+export type NodeType =
+  | 'file' | 'class' | 'function' | 'component' | 'route' | 'module'
+  | 'interface' | 'enum' | 'variable'
+  | 'k8sResource' | 'argoResource' | 'helmChart' | 'namespace';
 
-export type EdgeType = 'import' | 'call' | 'render' | 'route' | 'extends' | 'implements';
+export type EdgeType =
+  | 'import' | 'call' | 'render' | 'route' | 'extends' | 'implements'
+  | 'deploys' | 'exposes' | 'configures' | 'mounts' | 'selects'
+  | 'targets' | 'contains' | 'syncs' | 'triggers' | 'depends' | 'references';
 
-export type ViewType = 'architecture' | 'dependency' | 'callGraph' | 'componentTree' | 'routeMap' | 'userFlow';
+export type ViewType =
+  | 'architecture' | 'dependency' | 'callGraph' | 'componentTree'
+  | 'routeMap' | 'userFlow' | 'k8sMap' | 'argoMap';
 
 export type LayoutType = 'dagre' | 'dagreLR' | 'grid' | 'circle';
 
@@ -123,6 +131,11 @@ export interface FileDeps {
 
 // Message protocols
 
+export interface WorkspaceFolderInfo {
+  name: string;
+  uri: string;
+}
+
 export type ToWebviewMessage =
   | { command: 'setGraph'; data: { nodes: CyNodeData[]; edges: CyEdgeData[] } }
   | { command: 'setInsights'; data: Insight[] }
@@ -130,7 +143,8 @@ export type ToWebviewMessage =
   | { command: 'highlight'; nodeIds: string[] }
   | { command: 'setLoading'; loading: boolean }
   | { command: 'focusFile'; filePath: string }
-  | { command: 'setFileDeps'; data: FileDeps };
+  | { command: 'setFileDeps'; data: FileDeps }
+  | { command: 'setWorkspaceFolders'; folders: WorkspaceFolderInfo[]; selected: string };
 
 export type ToExtensionMessage =
   | { command: 'openFile'; filePath: string; line?: number; column?: number }
@@ -141,4 +155,5 @@ export type ToExtensionMessage =
   | { command: 'getFileDeps'; filePath: string }
   | { command: 'showFileCalls'; filePath: string }
   | { command: 'showFileImporters'; filePath: string }
+  | { command: 'changeWorkspaceFolder'; uri: string }
   | { command: 'ready' };

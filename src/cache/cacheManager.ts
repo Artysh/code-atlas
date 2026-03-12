@@ -17,7 +17,7 @@ export class CacheManager implements vscode.Disposable {
   private pendingInvalidations = new Set<string>();
 
   startWatching(): void {
-    this.watcher = vscode.workspace.createFileSystemWatcher('**/*.{ts,tsx,js,jsx}');
+    this.watcher = vscode.workspace.createFileSystemWatcher('**/*.{ts,tsx,js,jsx,yaml,yml}');
     this.watcher.onDidChange(uri => this.scheduleInvalidation(uri.fsPath));
     this.watcher.onDidCreate(uri => this.scheduleInvalidation(uri.fsPath));
     this.watcher.onDidDelete(uri => this.scheduleInvalidation(uri.fsPath));

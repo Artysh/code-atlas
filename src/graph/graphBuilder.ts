@@ -1,9 +1,15 @@
 import * as path from 'path';
 import { ParsedFile, ParsedRoute, CyNodeData, CyEdgeData, ViewType, NodeType } from '../types';
+import type { K8sResource } from '../parsers/yamlParser';
 
 export class GraphBuilder {
   private fileMap = new Map<string, ParsedFile>();
   private routeMap = new Map<string, ParsedRoute[]>();
+  private k8sResources: K8sResource[] = [];
+
+  setK8sResources(resources: K8sResource[]): void {
+    this.k8sResources = resources;
+  }
 
   build(
     parsedFiles: ParsedFile[],
@@ -29,6 +35,8 @@ export class GraphBuilder {
       case 'componentTree': return this.buildComponentTree(parsedFiles, workspaceRoot);
       case 'routeMap': return this.buildRouteMap(parsedFiles, routes, workspaceRoot);
       case 'userFlow': return this.buildUserFlow(parsedFiles, routes, workspaceRoot);
+      case 'k8sMap': return this.buildK8sMap(workspaceRoot);
+      case 'argoMap': return this.buildArgoMap(workspaceRoot);
       case 'architecture':
       default: return this.buildArchitectureMap(parsedFiles, routes, workspaceRoot);
     }
@@ -760,5 +768,190 @@ export class GraphBuilder {
 
   private dirId(dir: string): string {
     return `dir:${dir}`;
+  }
+
+  buildK8sMap(root: string): { nodes: CyNodeData[]; edges: CyEdgeData[] } {
+    return this.buildResourceGraph(this.k8sResources, root);
+  }
+
+  buildArgoMap(root: string): { nodes: CyNodeData[]; edges: CyEdgeData[] } {
+    const argoResources = this.k8sResources.filter(r =>
+      GraphBuilder.ARGO_KINDS.has(r.kind) || GraphBuilder.HELM_KINDS.has(r.kind),
+    );
+
+    const referencedNames = new Set<string>();
+    for (const r of argoResources) {
+      for (const ref of r.references) {
+        referencedNames.add(`${ref.targetKind}/${ref.targetName}`);
+      }
+    }
+
+    const argoAndHelmKinds = new Set([...GraphBuilder.ARGO_KINDS, ...GraphBuilder.HELM_KINDS]);
+    const related = this.k8sResources.filter(r =>
+      !argoAndHelmKinds.has(r.kind) && referencedNames.has(`${r.kind}/${r.name}`),
+    );
+
+    return this.buildResourceGraph([...argoResources, ...related], root);
+  }
+
+  private buildResourceGraph(
+    resources: K8sResource[],
+    root: string,
+  ): { nodes: CyNodeData[]; edges: CyEdgeData[] } {
+    const nodes: CyNodeData[] = [];
+    const edges: CyEdgeData[] = [];
+    const addedNodes = new Set<string>();
+    const addedEdges = new Set<string>();
+    const namespaces = new Set<string>();
+
+    const resourceLookup = new Map<string, K8sResource>();
+    for (const res of resources) {
+      resourceLookup.set(`${res.kind}/${res.name}`, res);
+    }
+
+    for (const res of resources) {
+      const ns = res.namespace || 'default';
+      namespaces.add(ns);
+    }
+
+    for (const ns of namespaces) {
+      const nsId = `ns:${ns}`;
+      if (!addedNodes.has(nsId)) {
+        addedNodes.add(nsId);
+        nodes.push({
+          data: {
+            id: nsId,
+            label: ns,
+            type: 'namespace',
+            filePath: '',
+            k8sKind: 'Namespace',
+          },
+        });
+      }
+    }
+
+    for (const res of resources) {
+      const nodeId = `${res.kind}/${res.name}`;
+      if (addedNodes.has(nodeId)) { continue; }
+      addedNodes.add(nodeId);
+
+      const ns = res.namespace || 'default';
+
+      nodes.push({
+        data: {
+          id: nodeId,
+          label: res.name,
+          type: this.inferResourceNodeType(res.kind),
+          filePath: res.filePath,
+          line: res.line,
+          parent: `ns:${ns}`,
+          k8sKind: res.kind,
+          k8sApiVersion: res.apiVersion,
+          k8sNamespace: ns,
+          k8sLabels: res.labels,
+        },
+      });
+
+      for (const ref of res.references) {
+        const targetId = `${ref.targetKind}/${ref.targetName}`;
+        const edgeId = `${nodeId}->${ref.relationship}->${targetId}`;
+
+        if (addedEdges.has(edgeId)) { continue; }
+        addedEdges.add(edgeId);
+
+        if (!addedNodes.has(targetId)) {
+          addedNodes.add(targetId);
+          const targetRes = resourceLookup.get(targetId);
+          const targetNs = targetRes?.namespace || ns;
+          const targetIsArgo = this.isArgoKind(ref.targetKind);
+
+          if (!addedNodes.has(`ns:${targetNs}`)) {
+            addedNodes.add(`ns:${targetNs}`);
+            nodes.push({
+              data: {
+                id: `ns:${targetNs}`,
+                label: targetNs,
+                type: 'namespace',
+                filePath: '',
+                k8sKind: 'Namespace',
+              },
+            });
+          }
+
+          nodes.push({
+            data: {
+              id: targetId,
+              label: ref.targetName,
+              type: this.inferResourceNodeType(ref.targetKind),
+              filePath: targetRes?.filePath || '',
+              line: targetRes?.line,
+              parent: `ns:${targetNs}`,
+              k8sKind: ref.targetKind,
+              isPhantom: !targetRes,
+            },
+          });
+        }
+
+        edges.push({
+          data: {
+            id: edgeId,
+            source: nodeId,
+            target: targetId,
+            type: ref.relationship as CyEdgeData['data']['type'],
+            label: ref.relationship,
+          },
+        });
+      }
+    }
+
+    return { nodes, edges };
+  }
+
+  buildK8sFileGraph(
+    resources: K8sResource[],
+    targetFilePath: string,
+    root: string,
+  ): { nodes: CyNodeData[]; edges: CyEdgeData[] } {
+    const fileResources = resources.filter(r => r.filePath === targetFilePath);
+    const relatedNames = new Set<string>();
+
+    for (const res of fileResources) {
+      relatedNames.add(`${res.kind}/${res.name}`);
+      for (const ref of res.references) {
+        relatedNames.add(`${ref.targetKind}/${ref.targetName}`);
+      }
+    }
+
+    for (const res of resources) {
+      for (const ref of res.references) {
+        if (fileResources.some(fr => fr.kind === ref.targetKind && fr.name === ref.targetName)) {
+          relatedNames.add(`${res.kind}/${res.name}`);
+        }
+      }
+    }
+
+    const relevant = resources.filter(r => relatedNames.has(`${r.kind}/${r.name}`));
+    return this.buildResourceGraph(relevant, root);
+  }
+
+  private static readonly ARGO_KINDS = new Set([
+    'Application', 'ApplicationSet', 'AppProject',
+    'Workflow', 'WorkflowTemplate', 'CronWorkflow', 'ClusterWorkflowTemplate',
+    'Rollout', 'AnalysisTemplate', 'AnalysisRun', 'Experiment',
+    'EventSource', 'Sensor', 'EventBus',
+  ]);
+
+  private static readonly HELM_KINDS = new Set([
+    'HelmChart', 'HelmValues', 'HelmRelease',
+  ]);
+
+  private isArgoKind(kind: string): boolean {
+    return GraphBuilder.ARGO_KINDS.has(kind);
+  }
+
+  private inferResourceNodeType(kind: string): NodeType {
+    if (GraphBuilder.HELM_KINDS.has(kind)) { return 'helmChart'; }
+    if (GraphBuilder.ARGO_KINDS.has(kind)) { return 'argoResource'; }
+    return 'k8sResource';
   }
 }
