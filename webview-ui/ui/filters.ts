@@ -57,6 +57,7 @@ export class Filters {
     this.typeCounts.clear();
     const cy = this.renderer.getCy();
     cy.nodes().forEach(node => {
+      if (node.isChild()) { return; }
       const t = node.data('type');
       if (t) { this.typeCounts.set(t, (this.typeCounts.get(t) || 0) + 1); }
     });
@@ -134,6 +135,23 @@ export class Filters {
       row.appendChild(label);
       row.appendChild(count);
       this.popup.appendChild(row);
+    }
+
+    const hiddenCount = this.renderer.getHiddenCount();
+    if (hiddenCount > 0) {
+      const divider = document.createElement('div');
+      divider.className = 'fp-divider';
+      this.popup.appendChild(divider);
+
+      const showHiddenBtn = document.createElement('button');
+      showHiddenBtn.className = 'fp-show-hidden';
+      showHiddenBtn.textContent = `Show Hidden (${hiddenCount})`;
+      showHiddenBtn.addEventListener('click', () => {
+        this.renderer.showAllHidden();
+        this.renderPopup(types);
+        this.renderSidebar(types);
+      });
+      this.popup.appendChild(showHiddenBtn);
     }
   }
 

@@ -61,7 +61,7 @@ export function activate(context: vscode.ExtensionContext): void {
           vscode.window.showWarningMessage('Code Atlas: No file selected.');
           return;
         }
-        await showFileGraph(filePath);
+        await showFileInGraph(filePath);
       }),
 
       vscode.commands.registerCommand('code-atlas.showFileGraph', async (uri?: vscode.Uri) => {
@@ -127,6 +127,27 @@ async function showGraph(view: ViewType): Promise<void> {
   panelManager.show(view);
   await panelManager.waitForReady();
   await refresh();
+}
+
+async function showFileInGraph(filePath: string): Promise<void> {
+  const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+  if (!workspaceRoot) { return; }
+
+  await ensureParsedData();
+
+  const viewToUse = currentView === 'architecture' ? 'architecture' : currentView;
+  panelManager.setFileViewActive(false);
+  panelManager.show(viewToUse);
+  await panelManager.waitForReady();
+
+  if (lastParsedFiles.length > 0) {
+    const { nodes, edges } = graphBuilder.build(lastParsedFiles, lastRoutes, viewToUse, workspaceRoot);
+    const insights = analyzer.analyze(lastParsedFiles, workspaceRoot);
+    panelManager.sendGraph(nodes, edges);
+    panelManager.sendInsights(insights);
+  }
+
+  panelManager.focusFile(filePath);
 }
 
 async function showFileGraph(filePath: string): Promise<void> {

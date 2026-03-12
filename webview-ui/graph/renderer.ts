@@ -39,6 +39,8 @@ const EDGE_GRADIENT_COLORS: Record<string, [string, string]> = {
 export class GraphRenderer {
   private cy: cytoscape.Core;
   private currentLayout: LayoutType = 'dagre';
+  private _manuallyHidden = new Set<string>();
+  private _detachedChildren = new Map<string, string[]>();
 
   constructor(container: HTMLElement) {
     this.cy = cytoscape({
@@ -64,6 +66,8 @@ export class GraphRenderer {
 
   setData(nodes: CyNodeData[], edges: CyEdgeData[]): void {
     this._savedParents.clear();
+    this._manuallyHidden.clear();
+    this._detachedChildren.clear();
     this.cy.elements().remove();
     this.cy.add(nodes as cytoscape.ElementDefinition[]);
     this.cy.add(edges as cytoscape.ElementDefinition[]);
@@ -275,6 +279,7 @@ export class GraphRenderer {
   getNodeTypes(): string[] {
     const types = new Set<string>();
     this.cy.nodes().forEach(node => {
+      if (node.isChild()) { return; }
       const type = node.data('type');
       if (type) { types.add(type); }
     });
@@ -282,15 +287,77 @@ export class GraphRenderer {
   }
 
   filterByType(visibleTypes: Set<string>): void {
-    this.cy.nodes().forEach(node => {
-      const type = node.data('type');
-      if (visibleTypes.has(type)) {
-        node.style('display', 'element');
-      } else {
-        node.style('display', 'none');
-      }
+    this.cy.batch(() => {
+      this.cy.nodes().forEach(node => {
+        if (this._manuallyHidden.has(node.id())) { return; }
+        if (node.isChild()) { return; }
+        const type = node.data('type');
+        if (visibleTypes.has(type)) {
+          this._reattachChildren(node.id());
+          node.style('display', 'element');
+        } else {
+          if (node.isParent()) {
+            this._detachChildren(node);
+          }
+          node.style('display', 'none');
+        }
+      });
     });
     setTimeout(() => this.fitToContent(), 100);
+  }
+
+  private _detachChildren(parentNode: cytoscape.NodeSingular): void {
+    const parentId = parentNode.id();
+    if (this._detachedChildren.has(parentId)) { return; }
+    const childIds: string[] = [];
+    parentNode.children().forEach((child: cytoscape.NodeSingular) => {
+      childIds.push(child.id());
+      child.move({ parent: null });
+    });
+    this._detachedChildren.set(parentId, childIds);
+  }
+
+  private _reattachChildren(parentId: string): void {
+    const childIds = this._detachedChildren.get(parentId);
+    if (!childIds) { return; }
+    for (const childId of childIds) {
+      const child = this.cy.getElementById(childId);
+      if (child.length > 0) {
+        child.move({ parent: parentId });
+      }
+    }
+    this._detachedChildren.delete(parentId);
+  }
+
+  hideNode(nodeId: string): void {
+    const node = this.cy.getElementById(nodeId);
+    if (node.length === 0) { return; }
+    this._manuallyHidden.add(nodeId);
+    if (node.isParent()) {
+      this._detachChildren(node);
+    }
+    node.style('display', 'none');
+    node.connectedEdges().style('display', 'none');
+    setTimeout(() => this.fitToContent(), 100);
+  }
+
+  showAllHidden(): void {
+    this.cy.batch(() => {
+      for (const id of this._manuallyHidden) {
+        this._reattachChildren(id);
+        const node = this.cy.getElementById(id);
+        if (node.length > 0) {
+          node.style('display', 'element');
+          node.connectedEdges().style('display', 'element');
+        }
+      }
+    });
+    this._manuallyHidden.clear();
+    setTimeout(() => this.fitToContent(), 100);
+  }
+
+  getHiddenCount(): number {
+    return this._manuallyHidden.size;
   }
 
   searchNodes(query: string): cytoscape.NodeCollection {

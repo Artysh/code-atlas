@@ -123,11 +123,11 @@ function positionTooltip(tooltip: HTMLElement, renderedPos: { x: number; y: numb
   tooltip.classList.remove('hidden');
 
   const tooltipRect = tooltip.getBoundingClientRect();
-  let left = containerRect.left + renderedPos.x + 20;
+  let left = containerRect.left + renderedPos.x + 10;
   let top = containerRect.top + renderedPos.y - 10;
 
   if (left + tooltipRect.width > window.innerWidth) {
-    left = containerRect.left + renderedPos.x - tooltipRect.width - 20;
+    left = containerRect.left + renderedPos.x - tooltipRect.width - 10;
   }
   if (top + tooltipRect.height > window.innerHeight) {
     top = window.innerHeight - tooltipRect.height - 10;
@@ -167,7 +167,7 @@ export function setupInteractions(renderer: GraphRenderer, vscode: VsCodeApi, fi
       if (!isHoveringTooltip) {
         tooltip.classList.add('hidden');
       }
-    }, 120);
+    }, 300);
   }
 
   tooltip.addEventListener('mouseenter', () => {
@@ -177,7 +177,7 @@ export function setupInteractions(renderer: GraphRenderer, vscode: VsCodeApi, fi
 
   tooltip.addEventListener('mouseleave', () => {
     isHoveringTooltip = false;
-    tooltip.classList.add('hidden');
+    scheduleHideTooltip();
   });
 
   tooltip.addEventListener('wheel', (e) => {
@@ -301,51 +301,58 @@ export function setupInteractions(renderer: GraphRenderer, vscode: VsCodeApi, fi
 
   cy.on('cxttap', 'node', (event) => {
     const node = event.target;
-    if (node.isParent()) { return; }
-
     event.originalEvent?.preventDefault?.();
 
     const nodeId = node.id();
+    const isParent = node.isParent();
     const renderedPos = node.renderedPosition();
     const containerRect = cy.container()!.getBoundingClientRect();
 
     contextMenu.innerHTML = '';
 
-    const menuItems: MenuItem[] = [
-      { label: 'Open File', icon: '\u{1F4C4}', action: () => {
-        vscode.postMessage({
-          command: 'openFile',
-          filePath: node.data('filePath'),
-          line: node.data('line'),
-        });
-      }},
-      'divider',
-      { label: 'Show Dependencies', icon: '\u2192', action: () => {
-        const depIds: string[] = [];
-        node.outgoers().nodes().forEach((n: cytoscape.NodeSingular) => { depIds.push(n.id()); });
-        renderer.highlightNodes([nodeId, ...depIds]);
-      }},
-      { label: 'Show Dependents', icon: '\u2190', action: () => {
-        const depIds: string[] = [];
-        node.incomers().nodes().forEach((n: cytoscape.NodeSingular) => { depIds.push(n.id()); });
-        renderer.highlightNodes([nodeId, ...depIds]);
-      }},
-      { label: 'Show File Dependencies', icon: '\u{1F50D}', action: () => {
-        vscode.postMessage({ command: 'getFileDeps', filePath: node.data('filePath') });
-        const sidebar = document.getElementById('sidebar')!;
-        sidebar.classList.remove('hidden');
-        setTimeout(() => renderer.getCy().resize(), 100);
-      }},
-      { label: 'Show Called Functions', icon: '\u{26A1}', action: () => {
-        vscode.postMessage({ command: 'showFileCalls', filePath: node.data('filePath') });
-      }},
-      { label: 'Show Reverse Dependencies', icon: '\u{1F517}', action: () => {
-        vscode.postMessage({ command: 'showFileImporters', filePath: node.data('filePath') });
-      }},
-      'divider',
+    const menuItems: MenuItem[] = [];
+
+    if (!isParent) {
+      menuItems.push(
+        { label: 'Open File', icon: '\u{1F4C4}', action: () => {
+          vscode.postMessage({
+            command: 'openFile',
+            filePath: node.data('filePath'),
+            line: node.data('line'),
+          });
+        }},
+        'divider',
+        { label: 'Show Dependencies', icon: '\u2192', action: () => {
+          const depIds: string[] = [];
+          node.outgoers().nodes().forEach((n: cytoscape.NodeSingular) => { depIds.push(n.id()); });
+          renderer.highlightNodes([nodeId, ...depIds]);
+        }},
+        { label: 'Show Dependents', icon: '\u2190', action: () => {
+          const depIds: string[] = [];
+          node.incomers().nodes().forEach((n: cytoscape.NodeSingular) => { depIds.push(n.id()); });
+          renderer.highlightNodes([nodeId, ...depIds]);
+        }},
+        { label: 'Show File Dependencies', icon: '\u{1F50D}', action: () => {
+          vscode.postMessage({ command: 'getFileDeps', filePath: node.data('filePath') });
+          const sidebar = document.getElementById('sidebar')!;
+          sidebar.classList.remove('hidden');
+          setTimeout(() => renderer.getCy().resize(), 100);
+        }},
+        { label: 'Show Called Functions', icon: '\u{26A1}', action: () => {
+          vscode.postMessage({ command: 'showFileCalls', filePath: node.data('filePath') });
+        }},
+        { label: 'Show Reverse Dependencies', icon: '\u{1F517}', action: () => {
+          vscode.postMessage({ command: 'showFileImporters', filePath: node.data('filePath') });
+        }},
+        'divider',
+      );
+    }
+
+    menuItems.push(
+      { label: isParent ? 'Hide Group' : 'Hide Node', icon: '\u{1F6AB}', action: () => renderer.hideNode(nodeId) },
       { label: 'Focus on Node', icon: '\u{1F3AF}', action: () => renderer.focusOnNode(nodeId) },
       { label: 'Clear Highlight', icon: '\u2716', action: () => renderer.clearHighlight() },
-    ];
+    );
 
     for (const item of menuItems) {
       if (item === 'divider') {

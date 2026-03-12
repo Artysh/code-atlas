@@ -60,11 +60,8 @@ html, body {
   border-bottom: 1px solid var(--vscode-panel-border, #333);
   background: var(--vscode-editor-background, #1e1e1e);
   flex-shrink: 0;
-  overflow-x: auto;
-  overflow-y: hidden;
-  scrollbar-width: none;
+  overflow: hidden;
 }
-#toolbar::-webkit-scrollbar { display: none; }
 
 .toolbar-section {
   display: flex;
@@ -75,6 +72,8 @@ html, body {
 
 .toolbar-end {
   margin-left: auto;
+  flex-shrink: 1;
+  min-width: 0;
 }
 
 .toolbar-group {
@@ -176,7 +175,7 @@ select:hover {
 #legend {
   position: absolute;
   bottom: 14px;
-  right: 14px;
+  left: 248px;
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
@@ -187,7 +186,7 @@ select:hover {
   z-index: 10;
   font-size: 11px;
   color: var(--vscode-descriptionForeground, #aaa);
-  max-width: calc(100% - 260px);
+  max-width: calc(100% - 270px);
 }
 .legend-item {
   display: flex;
@@ -790,6 +789,26 @@ select:hover {
   border-radius: 8px;
   min-width: 20px;
   text-align: center;
+}
+.fp-divider {
+  height: 1px;
+  background: var(--vscode-panel-border, #3a3a3a);
+  margin: 4px 0;
+}
+.fp-show-hidden {
+  display: block;
+  width: 100%;
+  background: none;
+  border: none;
+  color: var(--vscode-textLink-foreground, #4daafc);
+  font-size: 12px;
+  padding: 8px 14px;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.15s;
+}
+.fp-show-hidden:hover {
+  background: var(--vscode-toolbar-hoverBackground, rgba(255,255,255,0.08));
 }
 
 /* ================================================================

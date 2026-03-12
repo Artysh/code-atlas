@@ -140,6 +140,13 @@
           "group": "code-atlas"
         }
       ],
+      "editor/context": [
+        {
+          "submenu": "code-atlas.submenu",
+          "when": "resourceExtname =~ /\\.(ts|tsx|js|jsx)$/",
+          "group": "code-atlas"
+        }
+      ],
       "code-atlas.submenu": [
         {
           "command": "code-atlas.showFileInGraph"

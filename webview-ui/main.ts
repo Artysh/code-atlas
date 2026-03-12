@@ -37,12 +37,22 @@ const exporter = new Exporter(renderer, vscode);
 
 setupInteractions(renderer, vscode, fileDepsPanel);
 
+let pendingFocusFile: string | null = null;
+
 function updateCounts(): void {
   const cy = renderer.getCy();
   const nodeCount = cy.nodes().length;
   const edgeCount = cy.edges().length;
   nodeCountEl.textContent = `${nodeCount} nodes`;
   edgeCountEl.textContent = `${edgeCount} edges`;
+}
+
+function tryFocusFile(filePath: string): void {
+  const cy = renderer.getCy();
+  const matchedNode = cy.nodes().filter(n => n.data('filePath') === filePath);
+  if (matchedNode.length > 0) {
+    renderer.focusOnNode(matchedNode[0].id());
+  }
 }
 
 window.addEventListener('message', (event: MessageEvent<ToWebviewMessage>) => {
@@ -54,6 +64,11 @@ window.addEventListener('message', (event: MessageEvent<ToWebviewMessage>) => {
       minimap.update();
       filters.refresh();
       updateCounts();
+      if (pendingFocusFile) {
+        const fp = pendingFocusFile;
+        pendingFocusFile = null;
+        setTimeout(() => tryFocusFile(fp), 650);
+      }
       break;
 
     case 'setInsights':
@@ -77,7 +92,9 @@ window.addEventListener('message', (event: MessageEvent<ToWebviewMessage>) => {
       const cy = renderer.getCy();
       const matchedNode = cy.nodes().filter(n => n.data('filePath') === filePath);
       if (matchedNode.length > 0) {
-        renderer.focusOnNode(matchedNode[0].id());
+        setTimeout(() => tryFocusFile(filePath), 650);
+      } else {
+        pendingFocusFile = filePath;
       }
       break;
     }
