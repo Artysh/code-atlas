@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="./media/logo.png" alt="Code Atlas Logo" width="140">
+</p>
+
 <h1 align="center">Code Atlas</h1>
 <h3 align="center">Open Source Architecture Visualization for VS Code & Cursor</h3>
 
